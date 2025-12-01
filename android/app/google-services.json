@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "455804258948",
+    "project_id": "kylos-iptv-player",
+    "storage_bucket": "kylos-iptv-player.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:455804258948:android:8fcb101bf72522314f90d1",
+        "android_client_info": {
+          "package_name": "com.kylos.iptv_player"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhgkaOjnRbUhYhSu9Luz6jv7ylraNnZnU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:455804258948:android:42b01443760ff5f14f90d1",
+        "android_client_info": {
+          "package_name": "com.kylos.iptvplayer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhgkaOjnRbUhYhSu9Luz6jv7ylraNnZnU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

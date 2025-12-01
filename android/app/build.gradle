@@ -1,0 +1,175 @@
+// Kylos IPTV Player - Android Build Configuration
+//
+// Security-hardened build configuration with:
+// - ProGuard/R8 code shrinking and obfuscation for release builds
+// - Proper signing configuration for release builds
+// - Secure handling of keystore credentials
+//
+// See docs/security-and-privacy-hardening.md for full documentation.
+
+plugins {
+    id "com.android.application"
+    id "com.google.gms.google-services"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+// Load keystore properties from key.properties file
+// This file should NOT be committed to version control
+def keystorePropertiesFile = rootProject.file('key.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.kylos.iptvplayer"
+    compileSdk flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    // Default configuration for all build variants
+    defaultConfig {
+        applicationId "com.kylos.iptvplayer"
+        // minSdk 21 is required for:
+        // - EncryptedSharedPreferences (Android Keystore)
+        // - Modern TLS configurations
+        // - media_kit native libraries
+        minSdkVersion flutter.minSdkVersion
+        targetSdk flutter.targetSdkVersion
+        versionCode flutter.versionCode
+        versionName flutter.versionName
+
+        // Enable multidex for apps with >64K methods
+        multiDexEnabled true
+
+        // ProGuard/R8 consumer rules from dependencies
+        // This ensures library-specific keep rules are applied
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    // Signing configurations
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Debug builds should be clearly identifiable
+            // Note: applicationIdSuffix removed to match Firebase configuration
+            versionNameSuffix "-debug"
+            debuggable true
+
+            // Disable minification in debug for faster builds
+            minifyEnabled false
+            shrinkResources false
+        }
+
+        release {
+            // SECURITY: Apply signing configuration
+            signingConfig signingConfigs.release
+
+            // SECURITY: Enable R8 code shrinking and obfuscation
+            // R8 is the default minifier in Android Gradle Plugin 3.4+
+            // It provides better optimization than ProGuard
+            minifyEnabled true
+
+            // SECURITY: Remove unused resources
+            shrinkResources true
+
+            // SECURITY: Use ProGuard rules for obfuscation
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            // Performance: Enable native library debugging info stripping
+            // This reduces APK size and removes debug symbols
+            ndk {
+                debugSymbolLevel 'SYMBOL_TABLE'
+            }
+        }
+
+        // Optional: Profile build type for performance testing
+        // Uncomment if needed for performance profiling
+        // profile {
+        //     initWith release
+        //     debuggable true
+        //     matchingFallbacks = ['release']
+        // }
+    }
+
+    // Build features configuration
+    buildFeatures {
+        // Disable unused build features for smaller APKs
+        buildConfig true
+        viewBinding false
+        dataBinding false
+    }
+
+    // Lint configuration
+    lint {
+        // Abort on release-blocking issues
+        abortOnError true
+        // Check all issues, not just defaults
+        checkAllWarnings true
+        // Warn on deprecated API usage
+        warningsAsErrors false
+    }
+
+    // Packaging options
+    packaging {
+        resources {
+            // Exclude duplicate files that cause build conflicts
+            excludes += [
+                'META-INF/LICENSE.txt',
+                'META-INF/NOTICE.txt',
+                'META-INF/*.kotlin_module',
+            ]
+        }
+    }
+
+    // Split APKs by ABI for smaller downloads
+    // Consider enabling for production
+    splits {
+        abi {
+            enable false
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            universalApk true
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    // Core Android dependencies
+    // Kotlin stdlib is included automatically by kotlin-android plugin
+
+    // Security: Use the latest security library for EncryptedSharedPreferences
+    // This provides hardware-backed key storage on supported devices
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // MultiDex support for methods >64K
+    implementation 'androidx.multidex:multidex:2.0.1'
+
+     implementation 'com.google.firebase:firebase-appcheck-playintegrity'
+     implementation 'com.google.firebase:firebase-appcheck-debug'
+     implementation platform("com.google.firebase:firebase-bom:34.6.0")
+     implementation("com.google.firebase:firebase-analytics")
+}

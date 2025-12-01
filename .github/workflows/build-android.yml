@@ -1,0 +1,424 @@
+# Kylos IPTV Player - Android Build and Release Workflow
+#
+# This workflow builds Android artifacts for different distribution channels:
+# - Debug APK for internal testing
+# - Release AAB for Google Play Store
+# - Release APK for Fire TV / Amazon Appstore
+#
+# Triggered by:
+# - Manual dispatch (workflow_dispatch) for ad-hoc builds
+# - Release workflow (workflow_call) for automated releases
+#
+# Required Secrets:
+# - ANDROID_KEYSTORE_BASE64: Base64-encoded keystore file
+# - ANDROID_KEYSTORE_PASSWORD: Keystore password
+# - ANDROID_KEY_ALIAS: Key alias in the keystore
+# - ANDROID_KEY_PASSWORD: Key password
+# - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: Service account JSON for Play Store upload
+#
+# See docs/08-ci-cd-and-release-process.md for setup instructions.
+
+name: Build Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      target_platform:
+        description: 'Target platform'
+        required: true
+        default: 'mobile'
+        type: choice
+        options:
+          - mobile
+          - tv
+          - all
+      upload_to_play_store:
+        description: 'Upload to Google Play (release only)'
+        required: false
+        default: false
+        type: boolean
+      play_store_track:
+        description: 'Play Store track'
+        required: false
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+  workflow_call:
+    inputs:
+      build_type:
+        required: true
+        type: string
+      target_platform:
+        required: true
+        type: string
+      upload_to_play_store:
+        required: false
+        type: boolean
+        default: false
+      play_store_track:
+        required: false
+        type: string
+        default: 'internal'
+      version_name:
+        required: false
+        type: string
+      version_code:
+        required: false
+        type: string
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:
+        required: false
+
+env:
+  FLUTTER_VERSION: '3.19.0'
+  JAVA_VERSION: '17'
+
+jobs:
+  # =============================================================================
+  # Build Android Mobile APK/AAB
+  # =============================================================================
+  build-mobile:
+    name: Build Mobile (${{ inputs.build_type || 'debug' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: inputs.target_platform == 'mobile' || inputs.target_platform == 'all'
+
+    outputs:
+      artifact_name: ${{ steps.set-output.outputs.artifact_name }}
+      apk_path: ${{ steps.set-output.outputs.apk_path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ github.workspace }}/.dart_tool
+          key: pub-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run code generators
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          fi
+
+      # Decode and setup Android signing for release builds
+      - name: Setup Android signing
+        if: inputs.build_type == 'release'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          # Decode keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+
+          # Create key.properties file
+          cat > android/key.properties << EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Update version (if provided)
+        if: inputs.version_name != '' && inputs.version_code != ''
+        run: |
+          # Update pubspec.yaml version
+          sed -i "s/^version: .*/version: ${{ inputs.version_name }}+${{ inputs.version_code }}/" pubspec.yaml
+          cat pubspec.yaml | grep "^version:"
+
+      # Build Debug APK
+      - name: Build Debug APK
+        if: inputs.build_type == 'debug'
+        run: flutter build apk --debug
+
+      # Build Release AAB (for Play Store)
+      - name: Build Release AAB
+        if: inputs.build_type == 'release'
+        run: flutter build appbundle --release
+
+      # Build Release APK (for direct distribution)
+      - name: Build Release APK
+        if: inputs.build_type == 'release'
+        run: flutter build apk --release
+
+      - name: Set output paths
+        id: set-output
+        run: |
+          if [ "${{ inputs.build_type }}" == "release" ]; then
+            echo "artifact_name=android-mobile-release" >> $GITHUB_OUTPUT
+            echo "apk_path=build/app/outputs/flutter-apk/app-release.apk" >> $GITHUB_OUTPUT
+          else
+            echo "artifact_name=android-mobile-debug" >> $GITHUB_OUTPUT
+            echo "apk_path=build/app/outputs/flutter-apk/app-debug.apk" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.set-output.outputs.artifact_name }}-apk
+          path: ${{ steps.set-output.outputs.apk_path }}
+          retention-days: 14
+
+      - name: Upload AAB artifact
+        if: inputs.build_type == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-mobile-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+      - name: Clean up signing artifacts
+        if: always() && inputs.build_type == 'release'
+        run: |
+          rm -f android/app/upload-keystore.jks
+          rm -f android/key.properties
+
+  # =============================================================================
+  # Build Android TV APK
+  # =============================================================================
+  build-tv:
+    name: Build TV (${{ inputs.build_type || 'debug' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: inputs.target_platform == 'tv' || inputs.target_platform == 'all'
+
+    outputs:
+      artifact_name: ${{ steps.set-output.outputs.artifact_name }}
+      apk_path: ${{ steps.set-output.outputs.apk_path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ github.workspace }}/.dart_tool
+          key: pub-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run code generators
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          fi
+
+      - name: Setup Android signing
+        if: inputs.build_type == 'release'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          cat > android/key.properties << EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Update version (if provided)
+        if: inputs.version_name != '' && inputs.version_code != ''
+        run: |
+          sed -i "s/^version: .*/version: ${{ inputs.version_name }}+${{ inputs.version_code }}/" pubspec.yaml
+
+      # Build with TV entry point
+      - name: Build Debug APK (TV)
+        if: inputs.build_type == 'debug'
+        run: flutter build apk --debug -t lib/main_tv.dart
+
+      - name: Build Release APK (TV)
+        if: inputs.build_type == 'release'
+        run: flutter build apk --release -t lib/main_tv.dart
+
+      - name: Set output paths
+        id: set-output
+        run: |
+          if [ "${{ inputs.build_type }}" == "release" ]; then
+            echo "artifact_name=android-tv-release" >> $GITHUB_OUTPUT
+            echo "apk_path=build/app/outputs/flutter-apk/app-release.apk" >> $GITHUB_OUTPUT
+          else
+            echo "artifact_name=android-tv-debug" >> $GITHUB_OUTPUT
+            echo "apk_path=build/app/outputs/flutter-apk/app-debug.apk" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload TV APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.set-output.outputs.artifact_name }}-apk
+          path: ${{ steps.set-output.outputs.apk_path }}
+          retention-days: 14
+
+      - name: Clean up signing artifacts
+        if: always() && inputs.build_type == 'release'
+        run: |
+          rm -f android/app/upload-keystore.jks
+          rm -f android/key.properties
+
+  # =============================================================================
+  # Upload to Google Play Store
+  # =============================================================================
+  deploy-play-store:
+    name: Deploy to Play Store (${{ inputs.play_store_track || 'internal' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build-mobile
+    if: inputs.upload_to_play_store == true && inputs.build_type == 'release'
+
+    steps:
+      - name: Download AAB artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-mobile-release-aab
+          path: artifacts/
+
+      - name: Setup Ruby (for Fastlane)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Deploy to Play Store
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          # Write service account JSON
+          echo "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > play-store-credentials.json
+
+          # Upload using Fastlane supply
+          fastlane supply \
+            --aab artifacts/app-release.aab \
+            --track ${{ inputs.play_store_track || 'internal' }} \
+            --package_name com.kylos.iptvplayer \
+            --json_key play-store-credentials.json \
+            --skip_upload_metadata \
+            --skip_upload_images \
+            --skip_upload_screenshots
+
+          # Clean up
+          rm -f play-store-credentials.json
+
+      - name: Summary
+        run: |
+          echo "## Android Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Track**: ${{ inputs.play_store_track || 'internal' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: Release AAB" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: Uploaded successfully" >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # Notes for Amazon Appstore (Fire TV)
+  # =============================================================================
+  # To deploy to Amazon Appstore:
+  #
+  # 1. Amazon does not have a public API like Google Play. Options:
+  #    a. Use the Amazon Device Messaging CLI tool (limited)
+  #    b. Manual upload via Amazon Developer Console
+  #    c. Use third-party tools like fastlane-plugin-amazon_app_submission
+  #
+  # 2. The TV APK artifact from build-tv job can be used for Amazon submission
+  #
+  # 3. To add automated Amazon Appstore upload, add a job like:
+  #
+  # deploy-amazon:
+  #   name: Deploy to Amazon Appstore
+  #   runs-on: ubuntu-latest
+  #   needs: build-tv
+  #   if: inputs.upload_to_amazon == true && inputs.build_type == 'release'
+  #   steps:
+  #     - name: Download TV APK
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: android-tv-release-apk
+  #
+  #     # TODO: Add Amazon Appstore upload steps
+  #     # See: https://developer.amazon.com/docs/app-submission-api/overview.html

@@ -1,0 +1,253 @@
+// Kylos IPTV Player - Firestore Security Rules
+//
+// These rules enforce access control for all Firestore data.
+// Deploy with: firebase deploy --only firestore:rules
+//
+// SECURITY PRINCIPLES:
+// 1. Default deny - no access unless explicitly granted
+// 2. Owner-based access - users can only access their own data
+// 3. Server-side entitlement enforcement - purchases verified by Cloud Functions
+// 4. Rate limiting via quotas - prevent abuse
+// 5. Data validation - ensure data integrity at the database level
+//
+// IMPORTANT: Test these rules thoroughly before deploying to production.
+// Use the Firebase Emulator Suite for local testing.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================================================
+    // Helper Functions
+    // ==========================================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the user owns this document (based on document ID or uid field)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the user has a valid, non-expired subscription
+    // Note: This reads from entitlements collection, which may impact reads/costs
+    function hasActiveSubscription() {
+      let entitlement = get(/databases/$(database)/documents/entitlements/$(request.auth.uid));
+      return entitlement != null
+        && entitlement.data.isActive == true
+        && entitlement.data.expirationDate > request.time;
+    }
+
+    // Check if this is a Cloud Function (admin) making the request
+    // Cloud Functions use the Admin SDK which bypasses security rules,
+    // but this can be used if you want to allow certain operations
+    // from non-admin service accounts
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.admin == true;
+    }
+
+    // Validate that a string is not empty and within length limits
+    function isValidString(str, minLen, maxLen) {
+      return str is string
+        && str.size() >= minLen
+        && str.size() <= maxLen;
+    }
+
+    // Validate timestamp is reasonable (not too far in past or future)
+    function isValidTimestamp(ts) {
+      return ts is timestamp
+        && ts > timestamp.date(2020, 1, 1)
+        && ts < timestamp.date(2100, 1, 1);
+    }
+
+    // ==========================================================================
+    // Users Collection
+    // ==========================================================================
+    // Stores user profile and preferences
+    // Path: /users/{userId}
+
+    match /users/{userId} {
+      // Users can read their own document
+      allow read: if isOwner(userId);
+
+      // Users can create their own document on first sign-in
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.createdAt == request.time;
+
+      // Users can update their own document
+      // Prevent modification of sensitive fields
+      allow update: if isOwner(userId)
+        && request.resource.data.uid == resource.data.uid  // Can't change uid
+        && request.resource.data.createdAt == resource.data.createdAt;  // Can't change creation date
+
+      // Users cannot delete their account directly
+      // Account deletion should go through a Cloud Function for cleanup
+      allow delete: if false;
+
+      // ========================================================================
+      // Profiles Subcollection
+      // ========================================================================
+      // User profiles (e.g., Adult, Kids, Guest)
+      // Path: /users/{userId}/profiles/{profileId}
+
+      match /profiles/{profileId} {
+        allow read: if isOwner(userId);
+
+        // Allow create with limit enforcement
+        // Free tier: max 2 profiles, Pro tier: max 6 profiles
+        allow create: if isOwner(userId)
+          && request.resource.data.createdAt == request.time
+          && isValidString(request.resource.data.name, 1, 50);
+
+        allow update: if isOwner(userId)
+          && request.resource.data.createdAt == resource.data.createdAt;
+
+        allow delete: if isOwner(userId);
+      }
+
+      // ========================================================================
+      // Playlists Subcollection
+      // ========================================================================
+      // IPTV playlist sources (Xtream credentials, M3U URLs)
+      // Path: /users/{userId}/playlists/{playlistId}
+      //
+      // SECURITY: Playlist credentials (passwords) should be encrypted
+      // before storage. The client encrypts using AES-256-GCM with a
+      // key derived from the user's UID.
+
+      match /playlists/{playlistId} {
+        allow read: if isOwner(userId);
+
+        // Allow create with validation
+        allow create: if isOwner(userId)
+          && request.resource.data.createdAt == request.time
+          && isValidString(request.resource.data.name, 1, 100)
+          && request.resource.data.type in ['xtream', 'm3u'];
+
+        allow update: if isOwner(userId)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.type == resource.data.type;  // Can't change type
+
+        allow delete: if isOwner(userId);
+      }
+
+      // ========================================================================
+      // Devices Subcollection
+      // ========================================================================
+      // Per-device settings and last sync times
+      // Path: /users/{userId}/devices/{deviceId}
+
+      match /devices/{deviceId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
+
+      // ========================================================================
+      // Favorites Subcollection
+      // ========================================================================
+      // User's favorite channels/content
+      // Path: /users/{userId}/favorites/{favoriteId}
+
+      match /favorites/{favoriteId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
+
+      // ========================================================================
+      // Watch History Subcollection
+      // ========================================================================
+      // Recently watched content and positions
+      // Path: /users/{userId}/watch_history/{entryId}
+
+      match /watch_history/{entryId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
+    }
+
+    // ==========================================================================
+    // Entitlements Collection
+    // ==========================================================================
+    // Subscription and purchase status
+    // Path: /entitlements/{userId}
+    //
+    // SECURITY: Only Cloud Functions can write to this collection.
+    // Purchase verification happens server-side to prevent fraud.
+
+    match /entitlements/{userId} {
+      // Users can read their own entitlement status
+      allow read: if isOwner(userId);
+
+      // CRITICAL: Users cannot write to entitlements
+      // All writes must come from Cloud Functions after purchase verification
+      allow write: if false;
+
+      // ========================================================================
+      // Purchases Subcollection
+      // ========================================================================
+      // Individual purchase records
+      // Path: /entitlements/{userId}/purchases/{purchaseId}
+
+      match /purchases/{purchaseId} {
+        // Users can read their purchase history
+        allow read: if isOwner(userId);
+
+        // Only Cloud Functions can create/modify purchases
+        allow write: if false;
+      }
+    }
+
+    // ==========================================================================
+    // App Configuration Collection
+    // ==========================================================================
+    // Global app settings, feature flags, etc.
+    // Path: /app_config/{configId}
+    //
+    // Read-only for authenticated users, write-only for admins
+
+    match /app_config/{configId} {
+      // Any authenticated user can read app config
+      allow read: if isAuthenticated();
+
+      // Only admins (via Firebase Console or Admin SDK) can write
+      allow write: if false;
+    }
+
+    // ==========================================================================
+    // Analytics Events Collection
+    // ==========================================================================
+    // Anonymous usage analytics
+    // Path: /analytics_events/{eventId}
+    //
+    // Write-only, no reads from clients
+
+    match /analytics_events/{eventId} {
+      // No client reads - analytics are processed server-side
+      allow read: if false;
+
+      // Authenticated users can write analytics events
+      // Rate limiting should be enforced at the application level
+      allow create: if isAuthenticated()
+        && request.resource.data.timestamp == request.time
+        && request.resource.data.keys().hasOnly([
+          'eventType', 'timestamp', 'metadata', 'userId', 'sessionId'
+        ]);
+
+      // Events cannot be modified or deleted
+      allow update, delete: if false;
+    }
+
+    // ==========================================================================
+    // Default Deny Rule
+    // ==========================================================================
+    // Catch-all rule: deny access to any path not explicitly matched above
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

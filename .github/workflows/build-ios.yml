@@ -1,0 +1,348 @@
+# Kylos IPTV Player - iOS Build and Release Workflow
+#
+# This workflow builds iOS artifacts for different distribution channels:
+# - Debug IPA for internal testing
+# - Release IPA for TestFlight / App Store
+#
+# Triggered by:
+# - Manual dispatch (workflow_dispatch) for ad-hoc builds
+# - Release workflow (workflow_call) for automated releases
+#
+# Required Secrets:
+# - IOS_CERTIFICATE_BASE64: Base64-encoded .p12 distribution certificate
+# - IOS_CERTIFICATE_PASSWORD: Password for the .p12 certificate
+# - IOS_PROVISIONING_PROFILE_BASE64: Base64-encoded provisioning profile
+# - APP_STORE_CONNECT_API_KEY_ID: App Store Connect API Key ID
+# - APP_STORE_CONNECT_API_ISSUER_ID: App Store Connect API Issuer ID
+# - APP_STORE_CONNECT_API_KEY_BASE64: Base64-encoded App Store Connect API Key (.p8)
+#
+# See docs/08-ci-cd-and-release-process.md for setup instructions.
+
+name: Build iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      upload_to_testflight:
+        description: 'Upload to TestFlight (release only)'
+        required: false
+        default: false
+        type: boolean
+
+  workflow_call:
+    inputs:
+      build_type:
+        required: true
+        type: string
+      upload_to_testflight:
+        required: false
+        type: boolean
+        default: false
+      version_name:
+        required: false
+        type: string
+      version_code:
+        required: false
+        type: string
+    secrets:
+      IOS_CERTIFICATE_BASE64:
+        required: false
+      IOS_CERTIFICATE_PASSWORD:
+        required: false
+      IOS_PROVISIONING_PROFILE_BASE64:
+        required: false
+      APP_STORE_CONNECT_API_KEY_ID:
+        required: false
+      APP_STORE_CONNECT_API_ISSUER_ID:
+        required: false
+      APP_STORE_CONNECT_API_KEY_BASE64:
+        required: false
+
+env:
+  FLUTTER_VERSION: '3.19.0'
+
+jobs:
+  # =============================================================================
+  # Build iOS IPA
+  # =============================================================================
+  build-ios:
+    name: Build iOS (${{ inputs.build_type || 'debug' }})
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    outputs:
+      artifact_name: ${{ steps.set-output.outputs.artifact_name }}
+      ipa_path: ${{ steps.set-output.outputs.ipa_path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ github.workspace }}/.dart_tool
+          key: pub-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ runner.os }}-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            pods-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run code generators
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          fi
+
+      - name: Update version (if provided)
+        if: inputs.version_name != '' && inputs.version_code != ''
+        run: |
+          sed -i '' "s/^version: .*/version: ${{ inputs.version_name }}+${{ inputs.version_code }}/" pubspec.yaml
+          cat pubspec.yaml | grep "^version:"
+
+      # Setup code signing for release builds
+      - name: Install Apple certificate and provisioning profile
+        if: inputs.build_type == 'release'
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
+          security import $CERTIFICATE_PATH -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Install provisioning profile
+          PROFILE_PATH=$RUNNER_TEMP/profile.mobileprovision
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > $PROFILE_PATH
+
+          # Copy profile to Xcode profiles directory
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PROFILE_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          # Extract profile UUID for ExportOptions
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(/usr/bin/security cms -D -i $PROFILE_PATH))
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+
+      # Build Debug (no codesign)
+      - name: Build iOS Debug
+        if: inputs.build_type == 'debug'
+        run: flutter build ios --debug --no-codesign
+
+      # Build Release with code signing
+      - name: Build iOS Release
+        if: inputs.build_type == 'release'
+        run: |
+          flutter build ios --release
+
+      # Create IPA for release
+      - name: Create IPA
+        if: inputs.build_type == 'release'
+        run: |
+          # Create ExportOptions.plist
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>${{ vars.APPLE_TEAM_ID }}</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.kylos.iptvplayer</key>
+                  <string>${PROFILE_UUID}</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+          # Archive and export
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/ios/ipa
+
+      - name: Set output paths
+        id: set-output
+        run: |
+          if [ "${{ inputs.build_type }}" == "release" ]; then
+            echo "artifact_name=ios-release" >> $GITHUB_OUTPUT
+            echo "ipa_path=build/ios/ipa/Runner.ipa" >> $GITHUB_OUTPUT
+          else
+            echo "artifact_name=ios-debug" >> $GITHUB_OUTPUT
+            echo "ipa_path=build/ios/Debug-iphoneos" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.set-output.outputs.artifact_name }}
+          path: |
+            build/ios/ipa/*.ipa
+            build/ios/Debug-iphoneos
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Clean up keychain
+        if: always() && inputs.build_type == 'release'
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -f $RUNNER_TEMP/certificate.p12 || true
+          rm -f $RUNNER_TEMP/profile.mobileprovision || true
+
+  # =============================================================================
+  # Upload to TestFlight
+  # =============================================================================
+  deploy-testflight:
+    name: Deploy to TestFlight
+    runs-on: macos-latest
+    timeout-minutes: 30
+    needs: build-ios
+    if: inputs.upload_to_testflight == true && inputs.build_type == 'release'
+
+    steps:
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-release
+          path: artifacts/
+
+      - name: Setup App Store Connect API Key
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          # Use xcrun altool or notarytool for upload
+          xcrun altool --upload-app \
+            --type ios \
+            --file artifacts/*.ipa \
+            --apiKey $APP_STORE_CONNECT_API_KEY_ID \
+            --apiIssuer $APP_STORE_CONNECT_API_ISSUER_ID
+
+      - name: Clean up API Key
+        if: always()
+        run: |
+          rm -rf ~/.appstoreconnect/private_keys
+
+      - name: Summary
+        run: |
+          echo "## iOS Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Destination**: TestFlight" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: Release IPA" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: Uploaded successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The build will be available in TestFlight after Apple processing (usually 15-30 minutes)." >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # Alternative: Using Fastlane for iOS Deployment
+  # =============================================================================
+  # If you prefer Fastlane, you can replace the deploy-testflight job with:
+  #
+  # deploy-testflight-fastlane:
+  #   name: Deploy to TestFlight (Fastlane)
+  #   runs-on: macos-latest
+  #   needs: build-ios
+  #   if: inputs.upload_to_testflight == true && inputs.build_type == 'release'
+  #
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Download IPA artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ios-release
+  #         path: artifacts/
+  #
+  #     - name: Setup Ruby
+  #       uses: ruby/setup-ruby@v1
+  #       with:
+  #         ruby-version: '3.2'
+  #         bundler-cache: true
+  #
+  #     - name: Install Fastlane
+  #       run: gem install fastlane
+  #
+  #     - name: Upload to TestFlight
+  #       env:
+  #         APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+  #         APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+  #         APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+  #       run: |
+  #         # Decode API key
+  #         mkdir -p fastlane
+  #         echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > fastlane/AuthKey.p8
+  #
+  #         # Create Fastlane config
+  #         cat > fastlane/Fastfile << EOF
+  #         default_platform(:ios)
+  #
+  #         platform :ios do
+  #           desc "Upload to TestFlight"
+  #           lane :upload do
+  #             api_key = app_store_connect_api_key(
+  #               key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+  #               issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+  #               key_filepath: "fastlane/AuthKey.p8"
+  #             )
+  #
+  #             upload_to_testflight(
+  #               api_key: api_key,
+  #               ipa: Dir["artifacts/*.ipa"].first,
+  #               skip_waiting_for_build_processing: true
+  #             )
+  #           end
+  #         end
+  #         EOF
+  #
+  #         fastlane ios upload
+  #
+  #         rm -f fastlane/AuthKey.p8

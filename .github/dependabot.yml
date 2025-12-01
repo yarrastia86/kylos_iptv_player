@@ -1,0 +1,37 @@
+# Dependabot configuration for Kylos IPTV Player
+#
+# Automatically creates PRs for dependency updates.
+# See: https://docs.github.com/en/code-security/dependabot
+
+version: 2
+
+updates:
+  # Dart/Flutter dependencies (pubspec.yaml)
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "kylos-team"  # TODO: Update with actual team/user
+    labels:
+      - "dependencies"
+      - "dart"
+    commit-message:
+      prefix: "deps"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "kylos-team"  # TODO: Update with actual team/user
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
