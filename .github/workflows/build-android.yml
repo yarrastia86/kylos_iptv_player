@@ -353,7 +353,7 @@ jobs:
 
     steps:
       - name: Download AAB artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: android-mobile-release-aab
           path: artifacts/
@@ -416,7 +416,7 @@ jobs:
   #   if: inputs.upload_to_amazon == true && inputs.build_type == 'release'
   #   steps:
   #     - name: Download TV APK
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v6
   #       with:
   #         name: android-tv-release-apk
   #
