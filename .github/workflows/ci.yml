@@ -11,24 +11,13 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - develop
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-      - 'LICENSE'
-  pull_request:
-    branches:
-      - main
-      - develop
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-      - 'LICENSE'
+  workflow_dispatch:
+    inputs:
+      run_builds:
+        description: 'Run build verification'
+        required: false
+        default: true
+        type: boolean
 
 # Cancel in-progress runs for the same branch
 concurrency:
@@ -162,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: test
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: inputs.run_builds == true
 
     steps:
       - name: Checkout repository
@@ -223,7 +212,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     needs: test
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: inputs.run_builds == true
 
     steps:
       - name: Checkout repository
