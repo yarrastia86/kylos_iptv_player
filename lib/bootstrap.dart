@@ -20,6 +20,8 @@ import 'package:kylos_iptv_player/features/series/data/repositories/playlist_ser
 import 'package:kylos_iptv_player/features/series/presentation/providers/series_providers.dart';
 import 'package:kylos_iptv_player/features/vod/data/repositories/playlist_vod_repository.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/providers/vod_providers.dart';
+import 'package:kylos_iptv_player/core/domain/watch_history/watch_history_providers.dart';
+import 'package:kylos_iptv_player/infrastructure/repositories/local_watch_history_repository.dart';
 import 'package:kylos_iptv_player/infrastructure/firebase/firebase_initializer.dart';
 import 'package:kylos_iptv_player/infrastructure/firebase/firebase_providers.dart';
 import 'package:kylos_iptv_player/infrastructure/providers/infrastructure_providers.dart'
@@ -82,6 +84,7 @@ Future<void> bootstrap({
   final vodRepository = PlaylistVodRepository(localStorage: localStorage);
   final seriesRepository = PlaylistSeriesRepository(localStorage: localStorage);
   final epgRepository = MockEpgRepository();
+  final watchHistoryRepository = LocalWatchHistoryRepository(localStorage: localStorage);
 
   // Create provider container with platform overrides
   final container = ProviderContainer(
@@ -93,6 +96,7 @@ Future<void> bootstrap({
       playlistVodRepositoryProvider.overrideWithValue(vodRepository),
       playlistSeriesRepositoryProvider.overrideWithValue(seriesRepository),
       epgRepositoryProvider.overrideWithValue(epgRepository),
+      watchHistoryRepositoryProvider.overrideWithValue(watchHistoryRepository),
     ],
   );
 

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kylos_iptv_player/features/playlists/presentation/providers/playlist_providers.dart';
+import 'package:kylos_iptv_player/features/settings/domain/app_settings.dart';
+import 'package:kylos_iptv_player/features/settings/presentation/providers/settings_providers.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
 
 /// Settings screen with card-based layout.
@@ -44,7 +46,7 @@ class SettingsScreen extends ConsumerWidget {
                   iconColor: Colors.green,
                   title: 'Add New Playlist',
                   subtitle: 'M3U URL or Xtream Codes',
-                  onTap: () => context.push(Routes.addPlaylist),
+                  onTap: () => context.push(Routes.addPlaylistFromSettings),
                 ),
               ],
             ),
@@ -188,22 +190,16 @@ class _SettingsCardItem extends StatelessWidget {
 }
 
 // Video Quality Setting with dropdown
-class _VideoQualityItem extends ConsumerStatefulWidget {
+class _VideoQualityItem extends ConsumerWidget {
   const _VideoQualityItem({required this.ref});
 
   final WidgetRef ref;
 
   @override
-  ConsumerState<_VideoQualityItem> createState() => _VideoQualityItemState();
-}
-
-class _VideoQualityItemState extends ConsumerState<_VideoQualityItem> {
-  String _selectedQuality = 'Auto';
-  final List<String> _qualities = ['Auto', '1080p', '720p', '480p', '360p'];
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
 
     return ListTile(
       leading: Container(
@@ -216,21 +212,23 @@ class _VideoQualityItemState extends ConsumerState<_VideoQualityItem> {
       ),
       title: const Text('Video Quality'),
       subtitle: Text(
-        _selectedQuality,
+        settings.videoQuality.displayName,
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
-      trailing: DropdownButton<String>(
-        value: _selectedQuality,
+      trailing: DropdownButton<VideoQuality>(
+        value: settings.videoQuality,
         underline: const SizedBox(),
-        items: _qualities.map((quality) {
-          return DropdownMenuItem(value: quality, child: Text(quality));
+        items: VideoQuality.values.map((quality) {
+          return DropdownMenuItem(
+            value: quality,
+            child: Text(quality.displayName),
+          );
         }).toList(),
         onChanged: (value) {
           if (value != null) {
-            setState(() => _selectedQuality = value);
-            // TODO: Save to preferences
+            notifier.setVideoQuality(value);
           }
         },
       ),
@@ -239,22 +237,16 @@ class _VideoQualityItemState extends ConsumerState<_VideoQualityItem> {
 }
 
 // Buffer Size Setting
-class _BufferSizeItem extends ConsumerStatefulWidget {
+class _BufferSizeItem extends ConsumerWidget {
   const _BufferSizeItem({required this.ref});
 
   final WidgetRef ref;
 
   @override
-  ConsumerState<_BufferSizeItem> createState() => _BufferSizeItemState();
-}
-
-class _BufferSizeItemState extends ConsumerState<_BufferSizeItem> {
-  String _selectedBuffer = 'Normal';
-  final List<String> _bufferSizes = ['Low', 'Normal', 'High'];
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
 
     return ListTile(
       leading: Container(
@@ -267,21 +259,23 @@ class _BufferSizeItemState extends ConsumerState<_BufferSizeItem> {
       ),
       title: const Text('Buffer Size'),
       subtitle: Text(
-        _selectedBuffer,
+        settings.bufferSize.displayName,
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
-      trailing: DropdownButton<String>(
-        value: _selectedBuffer,
+      trailing: DropdownButton<BufferSize>(
+        value: settings.bufferSize,
         underline: const SizedBox(),
-        items: _bufferSizes.map((size) {
-          return DropdownMenuItem(value: size, child: Text(size));
+        items: BufferSize.values.map((size) {
+          return DropdownMenuItem(
+            value: size,
+            child: Text(size.displayName),
+          );
         }).toList(),
         onChanged: (value) {
           if (value != null) {
-            setState(() => _selectedBuffer = value);
-            // TODO: Save to preferences
+            notifier.setBufferSize(value);
           }
         },
       ),
@@ -290,20 +284,16 @@ class _BufferSizeItemState extends ConsumerState<_BufferSizeItem> {
 }
 
 // Auto Play Setting
-class _AutoPlayItem extends ConsumerStatefulWidget {
+class _AutoPlayItem extends ConsumerWidget {
   const _AutoPlayItem({required this.ref});
 
   final WidgetRef ref;
 
   @override
-  ConsumerState<_AutoPlayItem> createState() => _AutoPlayItemState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
 
-class _AutoPlayItemState extends ConsumerState<_AutoPlayItem> {
-  bool _autoPlay = true;
-
-  @override
-  Widget build(BuildContext context) {
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(8),
@@ -314,12 +304,11 @@ class _AutoPlayItemState extends ConsumerState<_AutoPlayItem> {
         child: const Icon(Icons.play_circle_outline, color: Colors.green, size: 24),
       ),
       title: const Text('Auto Play'),
-      subtitle: Text(_autoPlay ? 'Enabled' : 'Disabled'),
+      subtitle: Text(settings.autoPlay ? 'Enabled' : 'Disabled'),
       trailing: Switch(
-        value: _autoPlay,
+        value: settings.autoPlay,
         onChanged: (value) {
-          setState(() => _autoPlay = value);
-          // TODO: Save to preferences
+          notifier.setAutoPlay(value);
         },
       ),
     );
@@ -327,22 +316,16 @@ class _AutoPlayItemState extends ConsumerState<_AutoPlayItem> {
 }
 
 // Theme Setting
-class _ThemeItem extends ConsumerStatefulWidget {
+class _ThemeItem extends ConsumerWidget {
   const _ThemeItem({required this.ref});
 
   final WidgetRef ref;
 
   @override
-  ConsumerState<_ThemeItem> createState() => _ThemeItemState();
-}
-
-class _ThemeItemState extends ConsumerState<_ThemeItem> {
-  String _selectedTheme = 'Dark';
-  final List<String> _themes = ['System', 'Light', 'Dark'];
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
 
     return ListTile(
       leading: Container(
@@ -355,21 +338,23 @@ class _ThemeItemState extends ConsumerState<_ThemeItem> {
       ),
       title: const Text('Theme'),
       subtitle: Text(
-        _selectedTheme,
+        settings.themeMode.displayName,
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
-      trailing: DropdownButton<String>(
-        value: _selectedTheme,
+      trailing: DropdownButton<AppThemeMode>(
+        value: settings.themeMode,
         underline: const SizedBox(),
-        items: _themes.map((t) {
-          return DropdownMenuItem(value: t, child: Text(t));
+        items: AppThemeMode.values.map((mode) {
+          return DropdownMenuItem(
+            value: mode,
+            child: Text(mode.displayName),
+          );
         }).toList(),
         onChanged: (value) {
           if (value != null) {
-            setState(() => _selectedTheme = value);
-            // TODO: Apply theme change
+            notifier.setThemeMode(value);
           }
         },
       ),

@@ -25,7 +25,7 @@ class PlaylistsScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: 'Add Playlist',
-            onPressed: () => context.push(Routes.addPlaylist),
+            onPressed: () => context.push(Routes.addPlaylistFromSettings),
           ),
         ],
       ),
@@ -50,7 +50,7 @@ class PlaylistsScreen extends ConsumerWidget {
                   },
                 ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(Routes.addPlaylist),
+        onPressed: () => context.push(Routes.addPlaylistFromSettings),
         icon: const Icon(Icons.add),
         label: const Text('Add Playlist'),
       ),
@@ -81,7 +81,7 @@ class PlaylistsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: () => context.push(Routes.addPlaylist),
+            onPressed: () => context.push(Routes.addPlaylistFromSettings),
             icon: const Icon(Icons.add),
             label: const Text('Add Playlist'),
           ),
@@ -156,13 +156,9 @@ class PlaylistsScreen extends ConsumerWidget {
   }
 
   void _refreshPlaylist(BuildContext context, WidgetRef ref, PlaylistSource playlist) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Refreshing ${playlist.name}...'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
     // The channel repository will refresh when channels are loaded
+    // Trigger a refresh by setting the playlist as active again
+    ref.read(activePlaylistNotifierProvider.notifier).setActivePlaylist(playlist);
   }
 
   void _showPlaylistDetails(BuildContext context, PlaylistSource playlist) {
@@ -229,9 +225,6 @@ class PlaylistsScreen extends ConsumerWidget {
             onPressed: () {
               Navigator.pop(context);
               ref.read(playlistsNotifierProvider.notifier).removePlaylist(playlist.id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${playlist.name} deleted')),
-              );
             },
             child: const Text('Delete'),
           ),

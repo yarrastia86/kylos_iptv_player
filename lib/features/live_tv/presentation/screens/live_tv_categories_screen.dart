@@ -43,9 +43,7 @@ class _LiveTvCategoriesScreenState
   }
 
   void _handleSearch() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Search - Coming Soon')),
-    );
+    context.push(Routes.search);
   }
 
   Future<void> _handleMore() async {
@@ -73,74 +71,11 @@ class _LiveTvCategoriesScreenState
   }
 
   Future<void> _handleRefreshContent() async {
-    // Show loading indicator
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(width: 16),
-            Text('Refreshing content...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    // Refresh channel data
     await ref.read(channelListNotifierProvider.notifier).refresh();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Content refreshed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   Future<void> _handleRefreshEpg() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(width: 16),
-            Text('Refreshing TV Guide...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    // Refresh EPG data
     await ref.read(channelEpgNotifierProvider.notifier).refresh();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('TV Guide refreshed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   void _handleShowSortOptions() {
@@ -220,9 +155,6 @@ class _LiveTvCategoriesScreenState
       ),
       onTap: () {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sorted by: $label')),
-        );
         // TODO: Implement actual sorting logic
       },
     );

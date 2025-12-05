@@ -4,9 +4,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kylos_iptv_player/core/domain/watch_history/watch_history_providers.dart';
+import 'package:kylos_iptv_player/core/domain/watch_history/watch_progress.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/playlists/presentation/providers/playlist_providers.dart';
 import 'package:kylos_iptv_player/features/vod/domain/entities/vod_category.dart';
+import 'package:kylos_iptv_player/features/vod/domain/entities/vod_movie.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/providers/vod_providers.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/widgets/vod_category_card.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
@@ -14,7 +17,8 @@ import 'package:kylos_iptv_player/navigation/routes.dart';
 /// Video on Demand (Movies) screen.
 ///
 /// Displays available movies from the user's playlists organized
-/// by categories in a two-column layout.
+/// by categories. Features a "Continue Watching" section at the top
+/// for quick access to recently viewed content.
 class VodScreen extends ConsumerStatefulWidget {
   const VodScreen({super.key});
 
@@ -39,9 +43,7 @@ class _VodScreenState extends ConsumerState<VodScreen> {
   }
 
   void _handleSearch() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Search - Coming Soon')),
-    );
+    context.push(Routes.search);
   }
 
   void _handleMore() {
@@ -81,9 +83,7 @@ class _VodScreenState extends ConsumerState<VodScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sort - Coming Soon')),
-                );
+                // TODO: Implement sorting
               },
             ),
             ListTile(
@@ -117,37 +117,7 @@ class _VodScreenState extends ConsumerState<VodScreen> {
   }
 
   Future<void> _handleRefresh() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(width: 16),
-            Text('Refreshing movies...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
     await ref.read(vodListNotifierProvider.notifier).refresh();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Movies refreshed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   Future<void> _handleLogout() async {
@@ -189,9 +159,15 @@ class _VodScreenState extends ConsumerState<VodScreen> {
     context.go(Routes.dashboard);
   }
 
+  void _onContinueWatchingSelect(WatchProgress progress) {
+    // Navigate to movie details
+    context.push(Routes.movieDetailPath(progress.contentId));
+  }
+
   @override
   Widget build(BuildContext context) {
     final vodState = ref.watch(vodListNotifierProvider);
+    final continueWatchingAsync = ref.watch(continueWatchingProvider);
 
     return Scaffold(
       body: Container(
@@ -210,7 +186,7 @@ class _VodScreenState extends ConsumerState<VodScreen> {
             children: [
               _buildTopBar(),
               Expanded(
-                child: _buildContent(vodState),
+                child: _buildContent(vodState, continueWatchingAsync),
               ),
             ],
           ),
@@ -260,7 +236,10 @@ class _VodScreenState extends ConsumerState<VodScreen> {
     );
   }
 
-  Widget _buildContent(VodListState state) {
+  Widget _buildContent(
+    VodListState state,
+    AsyncValue<List<WatchProgress>> continueWatchingAsync,
+  ) {
     if (state.isLoading) {
       return const Center(
         child: CircularProgressIndicator(
@@ -342,24 +321,133 @@ class _VodScreenState extends ConsumerState<VodScreen> {
       );
     }
 
+    // Get continue watching movies only
+    final continueWatchingMovies = continueWatchingAsync.whenOrNull(
+      data: (items) => items
+          .where((item) => item.contentType == WatchContentType.movie)
+          .toList(),
+    );
+
     // Build categories with ALL and FAVOURITES at top
     final categories = _buildCategoriesWithSpecial(state);
 
-    return _buildCategoryList(categories);
+    return ListView(
+      padding: const EdgeInsets.only(bottom: KylosSpacing.l),
+      children: [
+        // Continue Watching Section
+        if (continueWatchingMovies != null && continueWatchingMovies.isNotEmpty)
+          _buildContinueWatchingSection(continueWatchingMovies),
+
+        // Categories Section Header
+        Padding(
+          padding: const EdgeInsets.only(
+            left: KylosSpacing.m,
+            top: KylosSpacing.m,
+            bottom: KylosSpacing.s,
+          ),
+          child: Text(
+            'Categories',
+            style: const TextStyle(
+              color: KylosColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+
+        // Category Grid
+        _buildCategoryGrid(categories),
+      ],
+    );
+  }
+
+  Widget _buildContinueWatchingSection(List<WatchProgress> items) {
+    // Convert WatchProgress to fake VodMovie for display
+    final movies = items
+        .map((progress) => VodMovie(
+              id: progress.contentId,
+              name: progress.title,
+              streamUrl: progress.streamUrl ?? '',
+              posterUrl: progress.posterUrl,
+            ))
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Padding(
+          padding: const EdgeInsets.only(
+            left: KylosSpacing.xxl,
+            right: KylosSpacing.m,
+            top: KylosSpacing.s,
+            bottom: KylosSpacing.s,
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.play_circle_outline,
+                color: KylosColors.moviesGlow,
+                size: 22,
+              ),
+              const SizedBox(width: KylosSpacing.xs),
+              const Text(
+                'Continue Watching',
+                style: TextStyle(
+                  color: KylosColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Horizontal movie row
+        SizedBox(
+          height: 225 + KylosSpacing.m, // Card height + padding
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: KylosSpacing.xxl),
+            itemCount: movies.length,
+            itemBuilder: (context, index) {
+              final movie = movies[index];
+              final progress = items[index];
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < movies.length - 1 ? 16 : 0,
+                ),
+                child: _ContinueWatchingCard(
+                  movie: movie,
+                  progress: progress.progress,
+                  autofocus: index == 0,
+                  onSelect: () => _onContinueWatchingSelect(progress),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: KylosSpacing.s),
+      ],
+    );
   }
 
   List<VodCategory> _buildCategoriesWithSpecial(VodListState state) {
     final allCategory = VodCategory(
       id: 'all',
       name: 'ALL',
-      movieCount: state.allMoviesCount, // Use allMoviesCount, not totalCount
+      movieCount: state.allMoviesCount,
       sortOrder: -2,
     );
 
     final favoritesCategory = VodCategory(
       id: 'favorites',
       name: 'FAVORITES',
-      movieCount: state.favoritesCount, // Use favoritesCount from state (source of truth)
+      movieCount: state.favoritesCount,
       sortOrder: -1,
       isFavorite: true,
     );
@@ -367,13 +455,14 @@ class _VodScreenState extends ConsumerState<VodScreen> {
     return [allCategory, favoritesCategory, ...state.categories];
   }
 
-  Widget _buildCategoryList(List<VodCategory> categories) {
+  Widget _buildCategoryGrid(List<VodCategory> categories) {
     final rowCount = (categories.length / 2).ceil();
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       itemCount: rowCount,
-      cacheExtent: 500,
       itemBuilder: (context, rowIndex) {
         final leftIndex = rowIndex * 2;
         final rightIndex = leftIndex + 1;
@@ -387,7 +476,7 @@ class _VodScreenState extends ConsumerState<VodScreen> {
                 child: VodCategoryCard(
                   category: categories[leftIndex],
                   onTap: () => _navigateToCategoryList(categories[leftIndex]),
-                  autofocus: leftIndex == 0,
+                  autofocus: false, // Don't autofocus category cards
                 ),
               ),
               const SizedBox(width: 4),
@@ -404,6 +493,229 @@ class _VodScreenState extends ConsumerState<VodScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// A continue watching card with progress indicator.
+class _ContinueWatchingCard extends StatefulWidget {
+  const _ContinueWatchingCard({
+    required this.movie,
+    required this.progress,
+    this.autofocus = false,
+    this.onSelect,
+  });
+
+  final VodMovie movie;
+  final double progress;
+  final bool autofocus;
+  final VoidCallback? onSelect;
+
+  @override
+  State<_ContinueWatchingCard> createState() => _ContinueWatchingCardState();
+}
+
+class _ContinueWatchingCardState extends State<_ContinueWatchingCard>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  bool _isFocused = false;
+
+  static const _cardWidth = 150.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _focusNode.addListener(_handleFocusChange);
+
+    _animationController = AnimationController(
+      duration: KylosDurations.fast,
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.08,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    final hasFocus = _focusNode.hasFocus;
+    if (hasFocus != _isFocused) {
+      setState(() => _isFocused = hasFocus);
+      if (hasFocus) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = _cardWidth * 1.5;
+
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      child: GestureDetector(
+        onTap: widget.onSelect,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnimation.value,
+              child: AnimatedContainer(
+                duration: KylosDurations.fast,
+                width: _cardWidth,
+                height: height,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(KylosRadius.m),
+                  border: _isFocused
+                      ? Border.all(
+                          color: KylosColors.moviesGlow,
+                          width: 3,
+                        )
+                      : null,
+                  boxShadow: _isFocused
+                      ? [
+                          BoxShadow(
+                            color: KylosColors.moviesGlow.withOpacity(0.4),
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(
+                    _isFocused ? KylosRadius.m - 3 : KylosRadius.m,
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Poster image
+                      _buildPoster(),
+
+                      // Bottom gradient
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: height * 0.5,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                KylosColors.backgroundStart.withOpacity(0.7),
+                                KylosColors.backgroundStart.withOpacity(0.95),
+                              ],
+                              stops: const [0.0, 0.5, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Progress bar
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: LinearProgressIndicator(
+                          value: widget.progress,
+                          backgroundColor: Colors.black45,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            KylosColors.moviesGlow,
+                          ),
+                          minHeight: 4,
+                        ),
+                      ),
+
+                      // Title
+                      Positioned(
+                        left: 8,
+                        right: 8,
+                        bottom: 12,
+                        child: Text(
+                          widget.movie.name,
+                          style: TextStyle(
+                            color: _isFocused
+                                ? KylosColors.moviesGlow
+                                : KylosColors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+
+                      // Play icon overlay
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _isFocused
+                                ? KylosColors.moviesGlow.withOpacity(0.9)
+                                : Colors.white.withOpacity(0.8),
+                          ),
+                          child: Icon(
+                            Icons.play_arrow,
+                            color: _isFocused ? Colors.white : Colors.black87,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPoster() {
+    final posterUrl = widget.movie.posterUrl;
+    if (posterUrl != null && posterUrl.isNotEmpty) {
+      return Image.network(
+        posterUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+      );
+    }
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: KylosColors.surfaceDark,
+      child: Center(
+        child: Icon(
+          Icons.movie,
+          size: _cardWidth * 0.3,
+          color: KylosColors.textMuted,
+        ),
+      ),
     );
   }
 }

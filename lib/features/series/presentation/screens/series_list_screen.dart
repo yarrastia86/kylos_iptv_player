@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/series/domain/entities/series.dart';
-import 'package:kylos_iptv_player/l10n/app_localizations.dart';
 import 'package:kylos_iptv_player/features/series/presentation/providers/series_providers.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
 
@@ -66,9 +65,7 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
   }
 
   void _handleMore() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context)!.optionsComingSoon)),
-    );
+    // TODO: Implement options menu
   }
 
   void _onSeriesSelected(int index, Series series) {

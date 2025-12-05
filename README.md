@@ -33,15 +33,29 @@ Kylos IPTV Player is a feature-rich, cross-platform IPTV streaming application t
 - Multi-source support (M3U files and Xtream Codes API)
 
 ### Video on Demand (VOD)
-- Movie browsing and playback
-- Category-based organization
-- Thumbnail/poster display
-- Continue watching functionality
+- Movie browsing and playback with detailed movie information
+- Category-based organization with pagination
+- Thumbnail/poster display with shimmer loading
+- Movie details screen with synopsis, cast, director info
+- Play/Resume functionality with progress tracking
+- Favorites management
+- Search movies by title
 
 ### Series Support
-- Series and episode management
-- Episode list browsing
-- Series category filtering
+- Series and episode management with season tabs
+- Episode list browsing with descriptions
+- Series category filtering with pagination
+- Series details screen with cover art and metadata
+- Direct episode playback from season view
+- Favorites management
+- Search series by title
+
+### Continue Watching
+- Track playback progress for movies and episodes
+- Resume from last position
+- Continue watching carousel on home screen
+- Progress bar indicators showing completion percentage
+- Remove items from continue watching list
 
 ### Advanced Playback
 - Multi-protocol support (HLS, DASH, RTMP, HTTP)
@@ -62,10 +76,11 @@ Kylos IPTV Player is a feature-rich, cross-platform IPTV streaming application t
 
 ### User Features
 - Multi-profile support
-- Favorite channels and content
-- Search functionality
+- Favorite channels, movies, and series
+- Unified search for movies and series with tabs
 - Settings persistence
 - User preferences and customization
+- Watch history tracking
 
 ### Monetization
 - Freemium model with in-app purchases

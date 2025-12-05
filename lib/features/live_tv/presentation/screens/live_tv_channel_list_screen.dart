@@ -97,9 +97,7 @@ class _LiveTvChannelListScreenState
   }
 
   void _handleSearch() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Search - Coming Soon')),
-    );
+    context.push(Routes.search);
   }
 
   void _handleMore() {
@@ -138,9 +136,7 @@ class _LiveTvChannelListScreenState
               ),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sort - Coming Soon')),
-                );
+                // TODO: Implement sorting
               },
             ),
             ListTile(
@@ -174,37 +170,7 @@ class _LiveTvChannelListScreenState
   }
 
   Future<void> _handleRefresh() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(width: 16),
-            Text('Refreshing channels...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
     await ref.read(channelListNotifierProvider.notifier).refresh();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Channels refreshed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   Future<void> _handleLogout() async {

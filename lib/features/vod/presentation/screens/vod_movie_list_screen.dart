@@ -1,25 +1,21 @@
 // Kylos IPTV Player - VOD Movie List Screen
-// Screen for displaying movies in a category with mini player.
+// Screen for displaying movies in a category with poster grid layout.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:kylos_iptv_player/core/domain/playback/playback_providers.dart';
-import 'package:kylos_iptv_player/core/domain/playback/playback_state.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/vod/domain/entities/vod_movie.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/providers/vod_providers.dart';
+import 'package:kylos_iptv_player/features/vod/presentation/widgets/movie_poster_card.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
-import 'package:kylos_iptv_player/features/playback/presentation/widgets/iptv_player_view.dart'
-    show NoVideoControls;
-import 'package:media_kit_video/media_kit_video.dart' hide NoVideoControls;
 
 /// Screen for displaying movies in a category.
 ///
-/// Features a two-column layout with:
-/// - LEFT: Scrollable movie list
-/// - RIGHT TOP: Mini player
-/// - RIGHT BOTTOM: Movie info panel
+/// Features a lean-back TV-optimized layout with:
+/// - LEFT: Horizontal scrolling rows of movie posters
+/// - RIGHT: Focused movie info panel with actions
 class VodMovieListScreen extends ConsumerStatefulWidget {
   const VodMovieListScreen({
     super.key,
@@ -38,13 +34,17 @@ class VodMovieListScreen extends ConsumerStatefulWidget {
 }
 
 class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
-  int _selectedIndex = 0;
+  VodMovie? _focusedMovie;
   final ScrollController _scrollController = ScrollController();
+
+  // Grid configuration
+  static const _cardWidth = 150.0;
+  static const _cardSpacing = 16.0;
+  static const _rowHeight = 225.0 + 16.0; // Card height + padding
 
   @override
   void initState() {
     super.initState();
-    // Load movies for this category
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMovies();
     });
@@ -58,55 +58,58 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
 
   Future<void> _loadMovies() async {
     final notifier = ref.read(movieListNotifierProvider.notifier);
-    // Pass the categoryId directly - selectCategory handles special categories
     await notifier.selectCategory(widget.categoryId);
   }
 
   void _handleBack() {
-    // Stop playback before navigating away
-    ref.read(playbackNotifierProvider.notifier).stop();
     context.go(Routes.vod);
   }
 
   void _handleSearch() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Search - Coming Soon')),
-    );
+    context.push(Routes.search);
   }
 
   void _handleMore() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Options - Coming Soon')),
-    );
+    // TODO: Implement options menu
+  }
+
+  void _onMovieSelect(VodMovie movie) {
+    // Navigate to movie details screen
+    context.push(Routes.movieDetailPath(movie.id));
+  }
+
+  void _onMovieFocus(VodMovie movie) {
+    setState(() => _focusedMovie = movie);
+  }
+
+  void _onMovieFavoriteToggle(VodMovie movie) {
+    ref.read(movieListNotifierProvider.notifier).toggleFavorite(movie.id);
   }
 
   void _playMovie(VodMovie movie) {
-    // Start playback with PlayableContent
-    final content = PlayableContent(
-      id: movie.id,
-      title: movie.name,
-      streamUrl: movie.streamUrl,
-      type: ContentType.vod,
-      logoUrl: movie.posterUrl,
-      categoryName: movie.categoryName,
-    );
-    ref.read(playbackNotifierProvider.notifier).play(content);
+    // Navigate to detail screen which handles playback
+    context.push(Routes.movieDetailPath(movie.id));
   }
 
-  void _goFullscreen() {
-    context.push(Routes.player);
+  /// Calculate how many movies fit per row based on available width.
+  int _calculateMoviesPerRow(double availableWidth) {
+    final totalCardWidth = _cardWidth + _cardSpacing;
+    return ((availableWidth - KylosSpacing.xxl * 2) / totalCardWidth).floor().clamp(4, 10);
   }
 
-  void _onMovieSelected(int index, VodMovie movie) {
-    setState(() => _selectedIndex = index);
-    _playMovie(movie);
+  /// Group movies into rows for horizontal scrolling.
+  List<List<VodMovie>> _groupMoviesIntoRows(List<VodMovie> movies, int moviesPerRow) {
+    final rows = <List<VodMovie>>[];
+    for (var i = 0; i < movies.length; i += moviesPerRow) {
+      final end = (i + moviesPerRow < movies.length) ? i + moviesPerRow : movies.length;
+      rows.add(movies.sublist(i, end));
+    }
+    return rows;
   }
 
   @override
   Widget build(BuildContext context) {
     final movieState = ref.watch(movieListNotifierProvider);
-    final playbackState = ref.watch(playbackNotifierProvider);
-    final videoController = ref.watch(videoControllerProvider);
 
     return Scaffold(
       body: Container(
@@ -125,11 +128,7 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
             children: [
               _buildTopBar(),
               Expanded(
-                child: _buildContent(
-                  movieState,
-                  playbackState,
-                  videoController,
-                ),
+                child: _buildContent(movieState),
               ),
               _buildBottomHints(),
             ],
@@ -180,11 +179,7 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
     );
   }
 
-  Widget _buildContent(
-    MovieListState movieState,
-    PlaybackState playbackState,
-    VideoController? videoController,
-  ) {
+  Widget _buildContent(MovieListState movieState) {
     if (movieState.isLoading && movieState.movies.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(
@@ -256,260 +251,113 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
       );
     }
 
+    // Set initial focused movie if not set
+    if (_focusedMovie == null && movieState.movies.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _focusedMovie = movieState.movies.first);
+        }
+      });
+    }
+
     return Row(
       children: [
-        // Left: Movie list (60%)
+        // Left: Movie poster grid (70%)
         Expanded(
-          flex: 6,
-          child: _buildMovieList(movieState),
+          flex: 7,
+          child: _buildMovieGrid(movieState),
         ),
-        // Right: Player + Info (40%)
+        // Right: Movie info panel (30%)
         Expanded(
-          flex: 4,
-          child: Column(
-            children: [
-              // Mini player
-              Expanded(
-                flex: 5,
-                child: _buildMiniPlayer(
-                  playbackState,
-                  videoController,
-                  movieState.movies.isNotEmpty && _selectedIndex < movieState.movies.length
-                      ? movieState.movies[_selectedIndex]
-                      : null,
-                ),
-              ),
-              // Movie info
-              Expanded(
-                flex: 5,
-                child: _buildMovieInfo(
-                  movieState.movies.isNotEmpty && _selectedIndex < movieState.movies.length
-                      ? movieState.movies[_selectedIndex]
-                      : null,
-                ),
-              ),
-            ],
-          ),
+          flex: 3,
+          child: _buildMovieInfoPanel(_focusedMovie),
         ),
       ],
     );
   }
 
-  Widget _buildMovieList(MovieListState state) {
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollEndNotification) {
-          final metrics = notification.metrics;
-          if (metrics.pixels >= metrics.maxScrollExtent - 200) {
-            ref.read(movieListNotifierProvider.notifier).loadNextPage();
-          }
-        }
-        return false;
+  Widget _buildMovieGrid(MovieListState state) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final moviesPerRow = _calculateMoviesPerRow(constraints.maxWidth);
+        final movieRows = _groupMoviesIntoRows(state.movies, moviesPerRow);
+
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollEndNotification) {
+              final metrics = notification.metrics;
+              if (metrics.pixels >= metrics.maxScrollExtent - 300) {
+                ref.read(movieListNotifierProvider.notifier).loadNextPage();
+              }
+            }
+            return false;
+          },
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(vertical: KylosSpacing.s),
+            itemCount: movieRows.length + (state.isLoadingMore ? 1 : 0),
+            itemBuilder: (context, rowIndex) {
+              if (rowIndex >= movieRows.length) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: KylosColors.moviesGlow,
+                    ),
+                  ),
+                );
+              }
+
+              final row = movieRows[rowIndex];
+              return _buildMovieRow(row, rowIndex, rowIndex == 0);
+            },
+          ),
+        );
       },
+    );
+  }
+
+  Widget _buildMovieRow(List<VodMovie> movies, int rowIndex, bool autofocusFirst) {
+    return SizedBox(
+      height: _rowHeight + KylosSpacing.m,
       child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        itemCount: state.movies.length + (state.isLoadingMore ? 1 : 0),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: KylosSpacing.xxl),
+        itemCount: movies.length,
         itemBuilder: (context, index) {
-          if (index >= state.movies.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: KylosColors.moviesGlow,
-                ),
-              ),
-            );
-          }
+          final movie = movies[index];
+          final isFirst = rowIndex == 0 && index == 0;
 
-          final movie = state.movies[index];
-          final isSelected = index == _selectedIndex;
-
-          return _buildMovieRow(movie, index, isSelected);
+          return Padding(
+            padding: EdgeInsets.only(
+              right: index < movies.length - 1 ? _cardSpacing : 0,
+            ),
+            child: MoviePosterCard(
+              movie: movie,
+              width: _cardWidth,
+              autofocus: autofocusFirst && isFirst,
+              onSelect: () => _onMovieSelect(movie),
+              onFocusChange: (hasFocus) {
+                if (hasFocus) {
+                  _onMovieFocus(movie);
+                }
+              },
+              onLongPress: () => _onMovieFavoriteToggle(movie),
+            ),
+          );
         },
       ),
     );
   }
 
-  Widget _buildMovieRow(VodMovie movie, int index, bool isSelected) {
-    return InkWell(
-      onTap: () => _onMovieSelected(index, movie),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? KylosColors.moviesGlow.withValues(alpha: 0.2)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected
-              ? Border.all(color: KylosColors.moviesGlow, width: 1)
-              : null,
-        ),
-        child: Row(
-          children: [
-            // Poster
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                width: 50,
-                height: 70,
-                child: movie.posterUrl != null
-                    ? Image.network(
-                        movie.posterUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stack) => Container(
-                          color: KylosColors.surfaceDark,
-                          child: const Icon(
-                            Icons.movie,
-                            color: KylosColors.textMuted,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        color: KylosColors.surfaceDark,
-                        child: const Icon(
-                          Icons.movie,
-                          color: KylosColors.textMuted,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    movie.name,
-                    style: TextStyle(
-                      color: isSelected
-                          ? KylosColors.moviesGlow
-                          : KylosColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (movie.releaseDate != null || movie.rating != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (movie.releaseDate != null) ...[
-                          Text(
-                            movie.releaseDate!.split('-').first,
-                            style: const TextStyle(
-                              color: KylosColors.textMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                          if (movie.rating != null) const SizedBox(width: 8),
-                        ],
-                        if (movie.rating != null) ...[
-                          const Icon(
-                            Icons.star,
-                            color: Colors.amber,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            movie.rating!,
-                            style: const TextStyle(
-                              color: KylosColors.textMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // Favorite button
-            IconButton(
-              icon: Icon(
-                movie.isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: movie.isFavorite ? Colors.red : KylosColors.textMuted,
-              ),
-              onPressed: () {
-                ref.read(movieListNotifierProvider.notifier).toggleFavorite(movie.id);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMiniPlayer(
-    PlaybackState playbackState,
-    VideoController? videoController,
-    VodMovie? selectedMovie,
-  ) {
-    return Container(
-      margin: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (videoController != null &&
-                playbackState.status != PlaybackStatus.idle)
-              Video(
-                controller: videoController,
-                controls: NoVideoControls,
-              )
-            else
-              Container(
-                color: Colors.black87,
-                child: const Center(
-                  child: Icon(
-                    Icons.movie,
-                    size: 48,
-                    color: KylosColors.textMuted,
-                  ),
-                ),
-              ),
-            // Loading indicator
-            if (playbackState.status == PlaybackStatus.buffering)
-              const Center(
-                child: CircularProgressIndicator(
-                  color: KylosColors.moviesGlow,
-                ),
-              ),
-            // Fullscreen button
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(
-                  Icons.fullscreen,
-                  color: Colors.white70,
-                ),
-                onPressed: _goFullscreen,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMovieInfo(VodMovie? movie) {
+  Widget _buildMovieInfoPanel(VodMovie? movie) {
     if (movie == null) {
       return Container(
-        margin: const EdgeInsets.all(8),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.all(KylosSpacing.m),
+        padding: const EdgeInsets.all(KylosSpacing.m),
         decoration: BoxDecoration(
-          color: KylosColors.surfaceDark.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+          color: KylosColors.surfaceDark.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(KylosRadius.m),
         ),
         child: const Center(
           child: Text(
@@ -521,102 +369,171 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
     }
 
     return Container(
-      margin: const EdgeInsets.all(8),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(KylosSpacing.m),
       decoration: BoxDecoration(
-        color: KylosColors.surfaceDark.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
+        color: KylosColors.surfaceDark.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(KylosRadius.m),
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              movie.name,
-              style: const TextStyle(
-                color: KylosColors.moviesGlow,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+      child: Column(
+        children: [
+          // Poster image (top 40%)
+          Expanded(
+            flex: 4,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(KylosRadius.m),
+                topRight: Radius.circular(KylosRadius.m),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              child: _buildPosterImage(movie),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (movie.releaseDate != null) ...[
-                  const Icon(Icons.calendar_today, size: 14, color: KylosColors.textMuted),
-                  const SizedBox(width: 4),
+          ),
+          // Info section (bottom 60%)
+          Expanded(
+            flex: 6,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(KylosSpacing.m),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
                   Text(
-                    movie.releaseDate!.split('-').first,
-                    style: const TextStyle(color: KylosColors.textMuted, fontSize: 12),
+                    movie.name,
+                    style: const TextStyle(
+                      color: KylosColors.moviesGlow,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 12),
-                ],
-                if (movie.rating != null) ...[
-                  const Icon(Icons.star, size: 14, color: Colors.amber),
-                  const SizedBox(width: 4),
-                  Text(
-                    movie.rating!,
-                    style: const TextStyle(color: KylosColors.textMuted, fontSize: 12),
+                  const SizedBox(height: KylosSpacing.s),
+
+                  // Metadata row
+                  Wrap(
+                    spacing: KylosSpacing.s,
+                    runSpacing: KylosSpacing.xs,
+                    children: [
+                      if (movie.releaseDate != null)
+                        _MetadataChip(
+                          icon: Icons.calendar_today,
+                          label: movie.releaseDate!.split('-').first,
+                        ),
+                      if (movie.rating != null)
+                        _MetadataChip(
+                          icon: Icons.star,
+                          label: movie.rating!,
+                          iconColor: Colors.amber,
+                        ),
+                      if (movie.duration != null)
+                        _MetadataChip(
+                          icon: Icons.timer,
+                          label: movie.duration!,
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                ],
-                if (movie.duration != null) ...[
-                  const Icon(Icons.timer, size: 14, color: KylosColors.textMuted),
-                  const SizedBox(width: 4),
-                  Text(
-                    movie.duration!,
-                    style: const TextStyle(color: KylosColors.textMuted, fontSize: 12),
+
+                  if (movie.genre != null) ...[
+                    const SizedBox(height: KylosSpacing.s),
+                    Text(
+                      movie.genre!,
+                      style: const TextStyle(
+                        color: KylosColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+
+                  if (movie.plot != null) ...[
+                    const SizedBox(height: KylosSpacing.m),
+                    Text(
+                      movie.plot!,
+                      style: const TextStyle(
+                        color: KylosColors.textSecondary,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+
+                  const SizedBox(height: KylosSpacing.m),
+
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.play_arrow,
+                          label: 'Play',
+                          isPrimary: true,
+                          onPressed: () => _playMovie(movie),
+                        ),
+                      ),
+                      const SizedBox(width: KylosSpacing.s),
+                      _ActionButton(
+                        icon: movie.isFavorite ? Icons.favorite : Icons.favorite_border,
+                        label: movie.isFavorite ? 'Saved' : 'Save',
+                        iconColor: movie.isFavorite ? Colors.red : null,
+                        onPressed: () => _onMovieFavoriteToggle(movie),
+                      ),
+                    ],
                   ),
+
+                  if (movie.director != null || movie.cast != null) ...[
+                    const SizedBox(height: KylosSpacing.m),
+                    if (movie.director != null)
+                      Text(
+                        'Director: ${movie.director}',
+                        style: const TextStyle(
+                          color: KylosColors.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    if (movie.cast != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Cast: ${movie.cast}',
+                        style: const TextStyle(
+                          color: KylosColors.textMuted,
+                          fontSize: 11,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ],
-              ],
+              ),
             ),
-            if (movie.genre != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                movie.genre!,
-                style: const TextStyle(
-                  color: KylosColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-            if (movie.plot != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                movie.plot!,
-                style: const TextStyle(
-                  color: KylosColors.textSecondary,
-                  fontSize: 12,
-                ),
-                maxLines: 6,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            if (movie.director != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Director: ${movie.director}',
-                style: const TextStyle(
-                  color: KylosColors.textMuted,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-            if (movie.cast != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Cast: ${movie.cast}',
-                style: const TextStyle(
-                  color: KylosColors.textMuted,
-                  fontSize: 11,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPosterImage(VodMovie movie) {
+    final posterUrl = movie.posterUrl;
+    if (posterUrl != null && posterUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: posterUrl,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        placeholder: (_, __) => _buildPosterPlaceholder(),
+        errorWidget: (_, __, ___) => _buildPosterPlaceholder(),
+      );
+    }
+    return _buildPosterPlaceholder();
+  }
+
+  Widget _buildPosterPlaceholder() {
+    return Container(
+      color: KylosColors.surfaceDark,
+      child: const Center(
+        child: Icon(
+          Icons.movie,
+          size: 48,
+          color: KylosColors.textMuted,
         ),
       ),
     );
@@ -628,19 +545,141 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: const [
-          _HintChip(icon: Icons.arrow_upward, label: 'Navigate'),
+          _HintChip(icon: Icons.arrow_back, label: 'Navigate'),
           SizedBox(width: 16),
-          _HintChip(icon: Icons.check, label: 'Play'),
+          _HintChip(icon: Icons.check, label: 'Select'),
           SizedBox(width: 16),
-          _HintChip(icon: Icons.favorite, label: 'Favorite'),
-          SizedBox(width: 16),
-          _HintChip(icon: Icons.fullscreen, label: 'Fullscreen'),
+          _HintChip(icon: Icons.keyboard_return, label: 'F = Favorite'),
         ],
       ),
     );
   }
 }
 
+/// Metadata chip for displaying movie info.
+class _MetadataChip extends StatelessWidget {
+  const _MetadataChip({
+    required this.icon,
+    required this.label,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: KylosSpacing.xs,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: KylosColors.surfaceOverlay,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 12,
+            color: iconColor ?? KylosColors.textMuted,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: KylosColors.textSecondary,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Action button for the info panel.
+class _ActionButton extends StatefulWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool isPrimary;
+  final Color? iconColor;
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = widget.isPrimary ? KylosColors.moviesGlow : KylosColors.buttonBackground;
+    final focusedColor = widget.isPrimary
+        ? KylosColors.moviesGlow.withOpacity(0.8)
+        : KylosColors.moviesGlow.withOpacity(0.3);
+
+    return Focus(
+      onFocusChange: (hasFocus) {
+        setState(() => _isFocused = hasFocus);
+      },
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: KylosDurations.fast,
+          padding: const EdgeInsets.symmetric(
+            horizontal: KylosSpacing.m,
+            vertical: KylosSpacing.s,
+          ),
+          decoration: BoxDecoration(
+            color: _isFocused ? focusedColor : baseColor,
+            borderRadius: BorderRadius.circular(KylosRadius.s),
+            border: _isFocused
+                ? Border.all(color: KylosColors.moviesGlow, width: 2)
+                : widget.isPrimary
+                    ? null
+                    : Border.all(color: KylosColors.buttonBorder, width: 1),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: 18,
+                color: widget.iconColor ??
+                    (widget.isPrimary ? Colors.white : KylosColors.textSecondary),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: widget.isPrimary ? Colors.white : KylosColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hint chip for keyboard shortcuts.
 class _HintChip extends StatelessWidget {
   const _HintChip({
     required this.icon,

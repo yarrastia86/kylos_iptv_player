@@ -737,14 +737,6 @@ class _AdvancedPlayerControlsState
             icon: const Icon(Icons.aspect_ratio, color: Colors.white),
             onPressed: () {
               ref.read(playerSettingsProvider.notifier).cycleAspectRatio();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      'Aspecto: ${ref.read(playerSettingsProvider).aspectRatio.label}'),
-                  duration: const Duration(seconds: 1),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
             },
             tooltip: 'Relación de aspecto',
           ),

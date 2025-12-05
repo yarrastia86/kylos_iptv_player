@@ -278,10 +278,17 @@ class _AddPlaylistScreenState extends ConsumerState<AddPlaylistScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
             content: Text('Failed to add playlist: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }

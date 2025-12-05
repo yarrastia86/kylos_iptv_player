@@ -40,6 +40,7 @@ abstract class Routes {
   static const String playbackSettings = '/settings/playback';
   static const String parentalControl = '/settings/parental';
   static const String playlists = '/settings/playlists';
+  static const String addPlaylistFromSettings = '/settings/playlists/add';
   static const String profiles = '/settings/profiles';
   static const String about = '/settings/about';
 

@@ -16,6 +16,7 @@ import 'package:kylos_iptv_player/features/series/presentation/screens/series_li
 import 'package:kylos_iptv_player/features/series/presentation/screens/series_screen.dart';
 import 'package:kylos_iptv_player/features/settings/presentation/screens/playlists_screen.dart';
 import 'package:kylos_iptv_player/features/settings/presentation/screens/settings_screen.dart';
+import 'package:kylos_iptv_player/features/vod/presentation/screens/movie_details_screen.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/screens/vod_movie_list_screen.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/screens/vod_screen.dart';
 import 'package:kylos_iptv_player/navigation/guards/onboarding_guard.dart';
@@ -123,6 +124,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               );
             },
           ),
+          // Movie details screen
+          GoRoute(
+            path: 'movie/:movieId',
+            builder: (context, state) {
+              final movieId = state.pathParameters['movieId'] ?? '';
+              return MovieDetailsScreen(movieId: movieId);
+            },
+          ),
         ],
       ),
       GoRoute(
@@ -177,8 +186,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: Routes.playlists,
         builder: (context, state) => const PlaylistsScreen(),
       ),
+      // Add playlist from settings (separate from onboarding flow)
       GoRoute(
-        path: Routes.addPlaylist,
+        path: Routes.addPlaylistFromSettings,
         builder: (context, state) => const AddPlaylistScreen(),
       ),
 

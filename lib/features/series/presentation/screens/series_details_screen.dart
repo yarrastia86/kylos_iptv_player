@@ -204,31 +204,22 @@ class SeriesDetailsScreen extends ConsumerWidget {
   }
 
   void _playEpisode(BuildContext context, WidgetRef ref, Episode episode, SeriesInfo seriesInfo) {
-    try {
-      final repository = ref.read(seriesRepositoryProvider);
-      final streamUrl = repository.getEpisodeStreamUrl(
-        episode.id,
-        episode.containerExtension,
-      );
+    final repository = ref.read(seriesRepositoryProvider);
+    final streamUrl = repository.getEpisodeStreamUrl(
+      episode.id,
+      episode.containerExtension,
+    );
 
-      final content = PlayableContent(
-        id: episode.id,
-        title: '${seriesInfo.info.name} - ${episode.title}',
-        streamUrl: streamUrl,
-        type: ContentType.episode,
-        logoUrl: seriesInfo.info.coverUrl,
-      );
+    final content = PlayableContent(
+      id: episode.id,
+      title: '${seriesInfo.info.name} - ${episode.title}',
+      streamUrl: streamUrl,
+      type: ContentType.episode,
+      logoUrl: seriesInfo.info.coverUrl,
+    );
 
-      ref.read(playbackNotifierProvider.notifier).play(content);
-      context.push(Routes.player);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error playing episode: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    ref.read(playbackNotifierProvider.notifier).play(content);
+    context.push(Routes.player);
   }
 }
 

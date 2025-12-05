@@ -39,9 +39,7 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
   }
 
   void _handleSearch() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Search - Coming Soon')),
-    );
+    context.push(Routes.search);
   }
 
   void _handleMore() {
@@ -81,9 +79,7 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sort - Coming Soon')),
-                );
+                // TODO: Implement sorting
               },
             ),
             ListTile(
@@ -117,37 +113,7 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
   }
 
   Future<void> _handleRefresh() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(width: 16),
-            Text('Refreshing series...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
     await ref.read(seriesListNotifierProvider.notifier).refresh();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Series refreshed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   Future<void> _handleLogout() async {

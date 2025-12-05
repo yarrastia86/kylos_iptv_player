@@ -45,7 +45,6 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
         if (next.purchaseStatus == PurchaseStatus.completed) {
           // Purchase completed, close paywall
           Navigator.of(context).pop(true);
-          _showSuccessSnackbar(context);
         } else if (next.purchaseStatus == PurchaseStatus.error) {
           // Show error
           _showErrorDialog(context, next.lastPurchaseResult);
@@ -396,15 +395,6 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
 
   Future<void> _startPurchase(Product product) async {
     await purchaseProduct(ref, product.id);
-  }
-
-  void _showSuccessSnackbar(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Welcome to Kylos Pro!'),
-        backgroundColor: Colors.green,
-      ),
-    );
   }
 
   void _showErrorDialog(BuildContext context, PurchaseResult? result) {
