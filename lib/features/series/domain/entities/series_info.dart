@@ -31,25 +31,58 @@ class SeriesInfo with _$SeriesInfo {
         : const Series(id: '', name: 'Unknown Series');
 
     final episodesData = json['episodes'] as Map<String, dynamic>? ?? {};
-    final seasonsData = json['seasons'] as List<dynamic>? ?? [];
 
-    final seasons = seasonsData.map((s) {
+    // If no seasons data, try to build seasons from episodes keys
+    List<dynamic> seasonsData = json['seasons'] as List<dynamic>? ?? [];
+
+    // Build seasons from episodes data if seasons list is incomplete
+    final episodeSeasonNumbers = episodesData.keys
+        .map((k) => int.tryParse(k) ?? 0)
+        .where((n) => n > 0) // Filter out season 0 (Specials)
+        .toSet();
+
+    final seasons = <Season>[];
+
+    // First, process seasons from seasonsData
+    for (final s in seasonsData) {
       final seasonJson = s as Map<String, dynamic>;
       final seasonNum = seasonJson.integer('season_number');
+
+      // Skip Season 0 (Specials)
+      if (seasonNum <= 0) continue;
+
       final episodeList = episodesData[seasonNum.toString()] as List<dynamic>? ?? [];
 
-      return Season(
+      seasons.add(Season(
         seasonNumber: seasonNum,
-        name: seasonJson.str('name', 'Season $seasonNum'),
+        name: 'Season $seasonNum', // Always use English
         plot: seasonJson.strOrNull('overview'),
         releaseDate: seasonJson.strOrNull('air_date'),
         coverUrl: seasonJson.strOrNull('cover'),
         episodes: episodeList
             .map((e) => Episode.fromJson(e as Map<String, dynamic>))
             .toList(),
-      );
-    }).toList()
-      ..sort((a, b) => a.seasonNumber.compareTo(b.seasonNumber));
+      ));
+
+      episodeSeasonNumbers.remove(seasonNum);
+    }
+
+    // Add any seasons that exist in episodes but not in seasons list
+    for (final seasonNum in episodeSeasonNumbers) {
+      final episodeList = episodesData[seasonNum.toString()] as List<dynamic>? ?? [];
+      if (episodeList.isNotEmpty) {
+        seasons.add(Season(
+          seasonNumber: seasonNum,
+          name: 'Season $seasonNum',
+          episodes: episodeList
+              .map((e) => Episode.fromJson(e as Map<String, dynamic>))
+              .toList(),
+        ));
+      }
+    }
+
+    // Sort by season number
+    seasons.sort((a, b) => a.seasonNumber.compareTo(b.seasonNumber));
 
     return SeriesInfo(info: info, seasons: seasons);
   }
