@@ -58,5 +58,17 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>455804258948-i9rt5km5pr8li2q8bc0o05jfndboccj8.apps.googleusercontent.com</string>
+	<!-- AdMob App ID - Required for google_mobile_ads plugin -->
+	<!-- TODO: Replace with your production AdMob App ID before release -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<!-- SKAdNetwork identifiers for ad tracking -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 </dict>
 </plist>

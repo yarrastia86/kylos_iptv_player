@@ -29,6 +29,8 @@ import 'package:kylos_iptv_player/infrastructure/providers/infrastructure_provid
 import 'package:kylos_iptv_player/infrastructure/repositories/local_playlist_repository.dart';
 import 'package:kylos_iptv_player/infrastructure/storage/local_storage.dart';
 import 'package:kylos_iptv_player/shared/providers/platform_providers.dart';
+import 'package:kylos_iptv_player/features/ads/presentation/providers/ad_providers.dart';
+import 'package:kylos_iptv_player/core/analytics/firebase_analytics_service.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -118,7 +120,13 @@ Future<void> bootstrap({
 
     // Sign in anonymously if no user is signed in
     await _ensureAuthenticated(container);
+
+    // Initialize Firebase Analytics
+    await _initializeAnalytics(container);
   }
+
+  // Initialize ads service (works independently of Firebase auth)
+  await _initializeAds(container);
 
   // Run the app
   runApp(
@@ -259,4 +267,48 @@ Future<void> _configureOrientation() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
+}
+
+/// Initialize Firebase Analytics service.
+Future<void> _initializeAnalytics(ProviderContainer container) async {
+  try {
+    final analyticsService = FirebaseAnalyticsService();
+    await analyticsService.initialize();
+
+    // Log app open event
+    await analyticsService.logEvent('app_open', {
+      'platform': defaultTargetPlatform.name,
+    });
+
+    if (kDebugMode) {
+      print('Firebase Analytics initialized');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Failed to initialize analytics (non-fatal): $e');
+    }
+  }
+}
+
+/// Initialize ads service (AdMob).
+Future<void> _initializeAds(ProviderContainer container) async {
+  try {
+    final adService = container.read(adServiceProvider);
+    final initialized = await adService.initialize();
+
+    if (initialized) {
+      // Pre-load an interstitial ad for later use
+      await adService.loadInterstitial();
+
+      if (kDebugMode) {
+        print('Ads service initialized and interstitial preloaded');
+      }
+    } else if (kDebugMode) {
+      print('Ads service not available on this platform');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Failed to initialize ads (non-fatal): $e');
+    }
+  }
 }

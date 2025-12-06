@@ -76,6 +76,17 @@ dependencies:
   in_app_purchase_storekit: ^0.3.13   # iOS StoreKit 2 support
   in_app_purchase_android: ^0.3.3     # Android specific extensions
 
+  # RevenueCat - Cross-platform subscription management
+  # Handles Apple/Google/Amazon billing, entitlement sync, and analytics
+  purchases_flutter: ^9.9.10
+
+  # Google Mobile Ads (AdMob) - Ad-supported free tier
+  # Banner, interstitial, and rewarded ads for monetization
+  google_mobile_ads: ^5.1.0
+
+  # Firebase Analytics - User behavior and churn tracking
+  firebase_analytics: ^11.3.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -8,6 +8,9 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_providers.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_state.dart';
+import 'package:kylos_iptv_player/features/ads/presentation/providers/ad_providers.dart';
+import 'package:kylos_iptv_player/features/ads/presentation/widgets/interstitial_ad_mixin.dart';
+import 'package:kylos_iptv_player/features/ads/presentation/widgets/preroll_ad_overlay.dart';
 import 'package:kylos_iptv_player/features/playback/domain/player_settings.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/providers/player_settings_provider.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/advanced_player_controls.dart';
@@ -33,8 +36,11 @@ class FullscreenPlayerScreen extends ConsumerStatefulWidget {
       _FullscreenPlayerScreenState();
 }
 
-class _FullscreenPlayerScreenState
-    extends ConsumerState<FullscreenPlayerScreen> {
+class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
+    with InterstitialAdMixin {
+  bool _showPrerollAd = true;
+  bool _prerollCompleted = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +51,17 @@ class _FullscreenPlayerScreenState
     ]);
     // Hide system UI for immersive experience
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    // Check if user is Pro (no ads)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final shouldShowAds = ref.read(shouldShowAdsProvider);
+      if (!shouldShowAds) {
+        setState(() {
+          _showPrerollAd = false;
+          _prerollCompleted = true;
+        });
+      }
+    });
   }
 
   @override
@@ -61,12 +78,25 @@ class _FullscreenPlayerScreenState
     super.dispose();
   }
 
-  void _handleBack() {
+  void _handlePrerollComplete() {
+    setState(() {
+      _showPrerollAd = false;
+      _prerollCompleted = true;
+    });
+  }
+
+  Future<void> _handleBack() async {
     // Stop playback before navigating away
     ref.read(playbackNotifierProvider.notifier).stop();
     // Restore brightness before navigating away
     ref.read(playerSettingsProvider.notifier).restoreBrightness();
-    context.pop();
+
+    // Show interstitial ad when exiting player (for free users)
+    await showInterstitialAfterPlayer();
+
+    if (mounted) {
+      context.pop();
+    }
   }
 
   @override
@@ -83,18 +113,26 @@ class _FullscreenPlayerScreenState
           // Video layer with aspect ratio support
           _buildVideoLayer(videoController, settings),
 
-          // Loading indicator
-          _buildLoadingLayer(playbackState),
+          // Loading indicator (only show if preroll completed)
+          if (_prerollCompleted) _buildLoadingLayer(playbackState),
 
           // Error view
           _buildErrorLayer(playbackState),
 
-          // Advanced controls overlay
-          AdvancedPlayerControls(
-            onBack: _handleBack,
-            autoHide: true,
-            hideDelay: const Duration(seconds: 4),
-          ),
+          // Advanced controls overlay (only show if preroll completed)
+          if (_prerollCompleted)
+            AdvancedPlayerControls(
+              onBack: _handleBack,
+              autoHide: true,
+              hideDelay: const Duration(seconds: 4),
+            ),
+
+          // Pre-roll ad overlay (shown before content plays)
+          if (_showPrerollAd)
+            PrerollAdOverlay(
+              onAdComplete: _handlePrerollComplete,
+              onAdSkipped: _handlePrerollComplete,
+            ),
         ],
       ),
     );

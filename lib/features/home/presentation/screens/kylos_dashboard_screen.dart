@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:kylos_iptv_player/features/ads/presentation/widgets/interstitial_ad_mixin.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/home/presentation/widgets/dashboard_top_bar.dart';
 import 'package:kylos_iptv_player/features/home/presentation/widgets/kylos_primary_tile.dart';
@@ -23,7 +24,8 @@ class KylosDashboardScreen extends ConsumerStatefulWidget {
       _KylosDashboardScreenState();
 }
 
-class _KylosDashboardScreenState extends ConsumerState<KylosDashboardScreen> {
+class _KylosDashboardScreenState extends ConsumerState<KylosDashboardScreen>
+    with InterstitialAdMixin {
   // Focus nodes for keyboard/remote navigation
   late final List<FocusNode> _tileFocusNodes;
 
@@ -48,16 +50,28 @@ class _KylosDashboardScreenState extends ConsumerState<KylosDashboardScreen> {
     super.dispose();
   }
 
-  void _navigateToLiveTV() {
-    context.go(Routes.liveTV);
+  Future<void> _navigateToLiveTV() async {
+    // Show interstitial ad on navigation (with frequency capping)
+    await showInterstitialOnNavigation();
+    if (mounted) {
+      context.go(Routes.liveTV);
+    }
   }
 
-  void _navigateToMovies() {
-    context.go(Routes.vod);
+  Future<void> _navigateToMovies() async {
+    // Show interstitial ad on navigation (with frequency capping)
+    await showInterstitialOnNavigation();
+    if (mounted) {
+      context.go(Routes.vod);
+    }
   }
 
-  void _navigateToSeries() {
-    context.go(Routes.series);
+  Future<void> _navigateToSeries() async {
+    // Show interstitial ad on navigation (with frequency capping)
+    await showInterstitialOnNavigation();
+    if (mounted) {
+      context.go(Routes.series);
+    }
   }
 
   void _navigateToSettings() {
