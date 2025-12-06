@@ -83,24 +83,40 @@ class AdConfig {
   }
 }
 
-/// Frequency caps for different ad types to avoid overwhelming users.
+/// Frequency caps for different ad types.
+/// Aggressive monetization strategy similar to YouTube/Peacock.
 class AdFrequencyCaps {
   const AdFrequencyCaps._();
 
   /// Minimum interval between interstitial ads (in seconds)
-  static const int interstitialMinIntervalSeconds = 180; // 3 minutes
+  /// Reduced for more aggressive monetization
+  static const int interstitialMinIntervalSeconds = 60; // 1 minute
 
   /// Minimum interval between interstitial ads after player closes (in seconds)
-  static const int interstitialAfterPlayerSeconds = 300; // 5 minutes
+  static const int interstitialAfterPlayerSeconds = 0; // Show immediately
 
-  /// Maximum interstitials per session
-  static const int maxInterstitialsPerSession = 10;
+  /// Maximum interstitials per session (high limit)
+  static const int maxInterstitialsPerSession = 50;
 
   /// Maximum interstitials per hour
-  static const int maxInterstitialsPerHour = 4;
+  static const int maxInterstitialsPerHour = 20;
 
   /// Cooldown after user dismisses an ad (in seconds)
-  static const int dismissCooldownSeconds = 60;
+  static const int dismissCooldownSeconds = 30;
+
+  /// Mid-roll ad interval during playback (in seconds)
+  /// Ads will show every X seconds of video playback
+  static const int midrollIntervalSeconds = 300; // Every 5 minutes
+
+  /// Minimum video duration to show mid-roll ads (in seconds)
+  /// Videos shorter than this won't have mid-roll ads
+  static const int midrollMinVideoDurationSeconds = 600; // 10 minutes
+
+  /// Pre-roll ad should show for EVERY video (not just first)
+  static const bool prerollOnEveryVideo = true;
+
+  /// Skip delay for pre-roll ads (in seconds)
+  static const int prerollSkipDelaySeconds = 5;
 }
 
 /// Ad placement identifiers for analytics and tracking.
@@ -121,4 +137,7 @@ class AdPlacements {
 
   /// Pre-roll before video playback
   static const String prerollVideo = 'preroll_video';
+
+  /// Mid-roll during video playback
+  static const String midrollVideo = 'midroll_video';
 }

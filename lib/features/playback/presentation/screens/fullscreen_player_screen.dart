@@ -1,5 +1,5 @@
 // Kylos IPTV Player - Fullscreen Player Screen
-// Fullscreen video player with advanced controls.
+// Fullscreen video player with advanced controls and aggressive ad monetization.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,8 +8,10 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_providers.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_state.dart';
+import 'package:kylos_iptv_player/features/ads/domain/entities/ad_config.dart';
 import 'package:kylos_iptv_player/features/ads/presentation/providers/ad_providers.dart';
 import 'package:kylos_iptv_player/features/ads/presentation/widgets/interstitial_ad_mixin.dart';
+import 'package:kylos_iptv_player/features/ads/presentation/widgets/midroll_ad_controller.dart';
 import 'package:kylos_iptv_player/features/ads/presentation/widgets/preroll_ad_overlay.dart';
 import 'package:kylos_iptv_player/features/playback/domain/player_settings.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/providers/player_settings_provider.dart';
@@ -40,6 +42,8 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
     with InterstitialAdMixin {
   bool _showPrerollAd = true;
   bool _prerollCompleted = false;
+  String? _lastContentId;
+  bool _isMidrollAdShowing = false;
 
   @override
   void initState() {
@@ -99,19 +103,58 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
     }
   }
 
+  void _checkForNewContent(PlaybackState playbackState) {
+    final currentContentId = playbackState.content?.id;
+
+    // If content changed, reset pre-roll state to show ad for new video
+    if (currentContentId != null && currentContentId != _lastContentId) {
+      _lastContentId = currentContentId;
+
+      // Check if we should show ads
+      final shouldShowAds = ref.read(shouldShowAdsProvider);
+      if (shouldShowAds) {
+        setState(() {
+          _showPrerollAd = true;
+          _prerollCompleted = false;
+        });
+        // Reset mid-roll state for new video
+        ref.read(midrollAdProvider.notifier).resetForNewVideo();
+      }
+    }
+  }
+
+  void _onMidrollAdTriggered() {
+    setState(() {
+      _isMidrollAdShowing = true;
+    });
+    // Pause the video
+    ref.read(playbackNotifierProvider.notifier).pause();
+  }
+
+  void _onMidrollAdComplete() {
+    setState(() {
+      _isMidrollAdShowing = false;
+    });
+    // Resume the video
+    ref.read(playbackNotifierProvider.notifier).resume();
+  }
+
   @override
   Widget build(BuildContext context) {
     final playbackState = ref.watch(playbackNotifierProvider);
     final videoController = ref.watch(videoControllerProvider);
     final settings = ref.watch(playerSettingsProvider);
 
+    // Check if content changed to show pre-roll for every video
+    _checkForNewContent(playbackState);
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Video layer with aspect ratio support
-          _buildVideoLayer(videoController, settings),
+          // Video layer with aspect ratio support and mid-roll ads
+          _buildVideoLayerWithMidroll(videoController, settings, playbackState),
 
           // Loading indicator (only show if preroll completed)
           if (_prerollCompleted) _buildLoadingLayer(playbackState),
@@ -135,6 +178,37 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildVideoLayerWithMidroll(
+    VideoController? controller,
+    PlayerSettings settings,
+    PlaybackState playbackState,
+  ) {
+    final videoWidget = _buildVideoLayer(controller, settings);
+
+    // Only wrap with mid-roll controller for VOD content (not live)
+    // and when pre-roll is completed
+    if (!_prerollCompleted ||
+        playbackState.isLive ||
+        playbackState.position == null ||
+        playbackState.duration == null) {
+      return videoWidget;
+    }
+
+    final shouldShowAds = ref.watch(shouldShowAdsProvider);
+    if (!shouldShowAds) {
+      return videoWidget;
+    }
+
+    return MidrollAdController(
+      currentPosition: playbackState.position!,
+      totalDuration: playbackState.duration!,
+      onAdTriggered: _onMidrollAdTriggered,
+      onAdComplete: _onMidrollAdComplete,
+      enabled: !_isMidrollAdShowing, // Prevent recursive triggers
+      child: videoWidget,
     );
   }
 

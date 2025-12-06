@@ -8,6 +8,7 @@ import 'package:kylos_iptv_player/features/monetization/domain/entities/purchase
 import 'package:kylos_iptv_player/features/monetization/domain/product_config.dart';
 import 'package:kylos_iptv_player/features/monetization/presentation/monetization_providers.dart';
 import 'package:kylos_iptv_player/features/monetization/presentation/widgets/product_card.dart';
+import 'package:kylos_iptv_player/features/monetization/presentation/widgets/promo_code_dialog.dart';
 
 /// Paywall screen showing subscription options.
 class PaywallScreen extends ConsumerStatefulWidget {
@@ -93,6 +94,11 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                       _buildProductOptions(context, state),
 
                     const SizedBox(height: 16),
+
+                    // Promo code button
+                    const PromoCodeButton(),
+
+                    const SizedBox(height: 8),
 
                     // Restore purchases
                     _buildRestoreButton(context, state),

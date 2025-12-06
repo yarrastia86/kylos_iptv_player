@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kylos_iptv_player/features/ads/domain/ad_service.dart';
 import 'package:kylos_iptv_player/features/ads/infrastructure/admob_ad_service.dart';
 import 'package:kylos_iptv_player/features/ads/presentation/ad_controller.dart';
+import 'package:kylos_iptv_player/features/monetization/presentation/providers/promo_code_providers.dart';
 import 'package:kylos_iptv_player/infrastructure/firebase/firebase_providers.dart';
 import 'package:kylos_iptv_player/shared/providers/platform_providers.dart';
 
@@ -42,11 +43,18 @@ final adControllerProvider = StateNotifierProvider<AdController, AdState>((ref) 
 
 /// Whether ads should be shown to the current user.
 ///
-/// Returns false for Pro subscribers or if ads are not initialized.
+/// Returns false for Pro subscribers, promo code benefits, or if ads are not initialized.
 final shouldShowAdsProvider = Provider<bool>((ref) {
   final adState = ref.watch(adControllerProvider);
   final isPro = ref.watch(hasProProvider);
-  return !isPro && adState.isInitialized;
+
+  // Check promo code ad-free benefit
+  final hasPromoAdFree = ref.watch(hasAdFreeFromPromoCodeProvider).maybeWhen(
+        data: (value) => value,
+        orElse: () => false,
+      );
+
+  return !isPro && !hasPromoAdFree && adState.isInitialized;
 });
 
 /// Whether the platform supports banner ads.
