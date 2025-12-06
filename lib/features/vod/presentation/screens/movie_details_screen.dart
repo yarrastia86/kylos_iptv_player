@@ -24,6 +24,7 @@ import 'package:kylos_iptv_player/navigation/routes.dart';
 ///
 /// All layouts feature:
 /// - Play button prominently visible without scrolling
+/// - Rich movie information display (plot, cast, director, genre, etc.)
 /// - No overflow issues - everything fits within safe area
 /// - Clear focus states for D-pad navigation
 class MovieDetailsScreen extends ConsumerStatefulWidget {
@@ -279,11 +280,12 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
               end: Alignment.centerRight,
               colors: [
                 KylosColors.backgroundStart,
-                KylosColors.backgroundStart.withOpacity(0.95),
-                KylosColors.backgroundStart.withOpacity(0.6),
+                KylosColors.backgroundStart.withOpacity(0.98),
+                KylosColors.backgroundStart.withOpacity(0.85),
+                KylosColors.backgroundStart.withOpacity(0.4),
                 Colors.transparent,
               ],
-              stops: const [0.0, 0.35, 0.55, 0.8],
+              stops: const [0.0, 0.25, 0.4, 0.6, 0.85],
             ),
           ),
         ),
@@ -294,50 +296,59 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
             padding: const EdgeInsets.all(KylosSpacing.xl),
             child: Row(
               children: [
-                // Left side: Info (45%)
+                // Left side: Info (50%)
                 Expanded(
-                  flex: 45,
+                  flex: 50,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildTopBar(movie),
-                      const SizedBox(height: KylosSpacing.xl),
-
-                      // Title
-                      Text(
-                        movie.name,
-                        style: KylosTvTextStyles.screenTitle.copyWith(
-                          fontSize: 32,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: KylosSpacing.m),
-
-                      // Metadata
-                      _buildMetadataRow(movie),
                       const SizedBox(height: KylosSpacing.l),
 
-                      // Progress indicator (if resumable)
-                      if (hasProgress) ...[
-                        _buildProgressIndicator(progress),
-                        const SizedBox(height: KylosSpacing.l),
-                      ],
-
-                      // Action buttons
-                      _buildActionButtons(hasProgress),
-                      const SizedBox(height: KylosSpacing.xl),
-
-                      // Synopsis (fills remaining space)
+                      // Scrollable content area
                       Expanded(
-                        child: _buildSynopsis(movie),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Title
+                              Text(
+                                movie.name,
+                                style: KylosTvTextStyles.screenTitle.copyWith(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: KylosSpacing.m),
+
+                              // Metadata chips
+                              _buildMetadataRow(movie),
+                              const SizedBox(height: KylosSpacing.l),
+
+                              // Progress indicator (if resumable)
+                              if (hasProgress) ...[
+                                _buildProgressIndicator(progress),
+                                const SizedBox(height: KylosSpacing.l),
+                              ],
+
+                              // Action buttons
+                              _buildActionButtons(hasProgress),
+                              const SizedBox(height: KylosSpacing.xl),
+
+                              // Movie Information Section
+                              _buildMovieInfoSection(movie),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
 
                 // Right side: Space for poster
-                const Expanded(flex: 55, child: SizedBox()),
+                const Expanded(flex: 50, child: SizedBox()),
               ],
             ),
           ),
@@ -428,8 +439,8 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
                   _buildActionButtons(hasProgress),
                   const SizedBox(height: KylosSpacing.xl),
 
-                  // Synopsis
-                  _buildSynopsisContent(movie),
+                  // Movie Information
+                  _buildMovieInfoSection(movie),
                 ],
               ),
             ),
@@ -531,8 +542,8 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
                   _buildActionButtons(hasProgress, compact: true),
                   const SizedBox(height: KylosSpacing.xl),
 
-                  // Synopsis
-                  _buildSynopsisContent(movie),
+                  // Movie Information
+                  _buildMovieInfoSection(movie),
                 ],
               ),
             ),
@@ -591,7 +602,7 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
       final year = movie.releaseDate!.length >= 4
           ? movie.releaseDate!.substring(0, 4)
           : movie.releaseDate;
-      items.add(_Chip(text: year!));
+      items.add(_MetadataChip(text: year!, icon: Icons.calendar_today));
     }
 
     // Rating
@@ -601,7 +612,18 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
 
     // Duration
     if (movie.duration != null && movie.duration!.isNotEmpty) {
-      items.add(_Chip(text: movie.duration!, icon: Icons.schedule));
+      items.add(_MetadataChip(text: movie.duration!, icon: Icons.schedule));
+    }
+
+    // Genre
+    if (movie.genre != null && movie.genre!.isNotEmpty) {
+      // Split genres and show first 2
+      final genres = movie.genre!.split(',').map((g) => g.trim()).take(2);
+      for (final genre in genres) {
+        if (genre.isNotEmpty) {
+          items.add(_MetadataChip(text: genre));
+        }
+      }
     }
 
     // Format badge
@@ -633,36 +655,45 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
   Widget _buildProgressIndicator(double progress) {
     final percent = (progress * 100).round();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.play_circle_outline,
-              size: 16,
-              color: KylosColors.tvAccent,
-            ),
-            const SizedBox(width: KylosSpacing.xs),
-            Text(
-              '$percent% watched',
-              style: KylosTvTextStyles.metadata.copyWith(
+    return Container(
+      padding: const EdgeInsets.all(KylosSpacing.m),
+      decoration: BoxDecoration(
+        color: KylosColors.surfaceDark.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(KylosRadius.m),
+        border: Border.all(color: KylosColors.tvAccent.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.play_circle_outline,
+                size: 18,
                 color: KylosColors.tvAccent,
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: KylosSpacing.xs),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: progress,
-            backgroundColor: KylosColors.surfaceLight,
-            valueColor: AlwaysStoppedAnimation<Color>(KylosColors.tvAccent),
-            minHeight: 6,
+              const SizedBox(width: KylosSpacing.xs),
+              Text(
+                'Continue watching • $percent% complete',
+                style: KylosTvTextStyles.metadata.copyWith(
+                  color: KylosColors.tvAccent,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: KylosSpacing.s),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: KylosColors.surfaceLight,
+              valueColor: AlwaysStoppedAnimation<Color>(KylosColors.tvAccent),
+              minHeight: 8,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -714,43 +745,156 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
     );
   }
 
-  Widget _buildSynopsis(VodMovie movie) {
-    return SingleChildScrollView(
-      child: _buildSynopsisContent(movie),
-    );
-  }
-
-  Widget _buildSynopsisContent(VodMovie movie) {
+  /// Build the comprehensive movie information section
+  Widget _buildMovieInfoSection(VodMovie movie) {
     final hasPlot = movie.plot != null && movie.plot!.isNotEmpty;
     final hasDirector = movie.director != null && movie.director!.isNotEmpty;
     final hasCast = movie.cast != null && movie.cast!.isNotEmpty;
+    final hasGenre = movie.genre != null && movie.genre!.isNotEmpty;
+    final hasCategory = movie.categoryName != null && movie.categoryName!.isNotEmpty;
 
-    if (!hasPlot && !hasDirector && !hasCast) {
-      return const SizedBox.shrink();
+    // Check if any info is available
+    if (!hasPlot && !hasDirector && !hasCast && !hasGenre && !hasCategory) {
+      return _buildNoInfoAvailable();
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Plot / Synopsis
         if (hasPlot) ...[
-          Text(
-            movie.plot!,
-            style: KylosTvTextStyles.body.copyWith(
-              height: 1.6,
+          _SectionHeader(title: 'Synopsis', icon: Icons.description),
+          const SizedBox(height: KylosSpacing.s),
+          Container(
+            padding: const EdgeInsets.all(KylosSpacing.m),
+            decoration: BoxDecoration(
+              color: KylosColors.surfaceDark.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(KylosRadius.m),
+            ),
+            child: Text(
+              movie.plot!,
+              style: KylosTvTextStyles.body.copyWith(
+                height: 1.7,
+                color: KylosColors.textSecondary,
+              ),
             ),
           ),
-          const SizedBox(height: KylosSpacing.l),
+          const SizedBox(height: KylosSpacing.xl),
         ],
 
-        if (hasDirector) ...[
-          _InfoRow(label: 'Director', value: movie.director!),
+        // Cast & Crew Section
+        if (hasDirector || hasCast) ...[
+          _SectionHeader(title: 'Cast & Crew', icon: Icons.people),
           const SizedBox(height: KylosSpacing.s),
+          Container(
+            padding: const EdgeInsets.all(KylosSpacing.m),
+            decoration: BoxDecoration(
+              color: KylosColors.surfaceDark.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(KylosRadius.m),
+            ),
+            child: Column(
+              children: [
+                if (hasDirector) ...[
+                  _DetailRow(
+                    icon: Icons.movie_creation,
+                    label: 'Director',
+                    value: movie.director!,
+                  ),
+                  if (hasCast) const SizedBox(height: KylosSpacing.m),
+                ],
+                if (hasCast)
+                  _DetailRow(
+                    icon: Icons.group,
+                    label: 'Cast',
+                    value: movie.cast!,
+                    multiLine: true,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: KylosSpacing.xl),
         ],
 
-        if (hasCast) ...[
-          _InfoRow(label: 'Cast', value: movie.cast!),
+        // Additional Details Section
+        if (hasGenre || hasCategory || movie.containerExtension != null) ...[
+          _SectionHeader(title: 'Details', icon: Icons.info_outline),
+          const SizedBox(height: KylosSpacing.s),
+          Container(
+            padding: const EdgeInsets.all(KylosSpacing.m),
+            decoration: BoxDecoration(
+              color: KylosColors.surfaceDark.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(KylosRadius.m),
+            ),
+            child: Column(
+              children: [
+                if (hasGenre) ...[
+                  _DetailRow(
+                    icon: Icons.category,
+                    label: 'Genre',
+                    value: movie.genre!,
+                  ),
+                  if (hasCategory || movie.containerExtension != null)
+                    const SizedBox(height: KylosSpacing.m),
+                ],
+                if (hasCategory) ...[
+                  _DetailRow(
+                    icon: Icons.folder,
+                    label: 'Category',
+                    value: movie.categoryName!,
+                  ),
+                  if (movie.containerExtension != null)
+                    const SizedBox(height: KylosSpacing.m),
+                ],
+                if (movie.containerExtension != null)
+                  _DetailRow(
+                    icon: Icons.video_file,
+                    label: 'Format',
+                    value: movie.containerExtension!.toUpperCase(),
+                  ),
+              ],
+            ),
+          ),
         ],
+
+        // Bottom spacing
+        const SizedBox(height: KylosSpacing.xl),
       ],
+    );
+  }
+
+  Widget _buildNoInfoAvailable() {
+    return Container(
+      padding: const EdgeInsets.all(KylosSpacing.xl),
+      decoration: BoxDecoration(
+        color: KylosColors.surfaceDark.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(KylosRadius.m),
+        border: Border.all(color: KylosColors.buttonBorder),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 48,
+            color: KylosColors.textMuted,
+          ),
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'No additional information available',
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            'Press play to start watching',
+            style: KylosTvTextStyles.metadata.copyWith(
+              color: KylosColors.textMuted,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -758,6 +902,100 @@ class _MovieDetailsScreenState extends ConsumerState<MovieDetailsScreen> {
 // =============================================================================
 // Reusable Widgets
 // =============================================================================
+
+/// Section header with icon and title
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.icon,
+  });
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: KylosColors.tvAccent,
+        ),
+        const SizedBox(width: KylosSpacing.s),
+        Text(
+          title,
+          style: KylosTvTextStyles.sectionHeader.copyWith(
+            fontSize: 18,
+            color: KylosColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Detail row with icon, label, and value
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.multiLine = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool multiLine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: multiLine ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: KylosColors.surfaceOverlay,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            size: 18,
+            color: KylosColors.tvAccent.withOpacity(0.8),
+          ),
+        ),
+        const SizedBox(width: KylosSpacing.m),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: KylosTvTextStyles.metadata.copyWith(
+                  color: KylosColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: KylosTvTextStyles.body.copyWith(
+                  color: KylosColors.textPrimary,
+                  fontSize: 15,
+                  height: multiLine ? 1.5 : 1.2,
+                ),
+                maxLines: multiLine ? 4 : 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// Primary play button with prominent styling.
 class _PlayButton extends StatefulWidget {
@@ -1024,9 +1262,9 @@ class _IconButtonState extends State<_IconButton> {
   }
 }
 
-/// Metadata chip.
-class _Chip extends StatelessWidget {
-  const _Chip({
+/// Metadata chip with optional icon.
+class _MetadataChip extends StatelessWidget {
+  const _MetadataChip({
     required this.text,
     this.icon,
   });
@@ -1044,6 +1282,7 @@ class _Chip extends StatelessWidget {
       decoration: BoxDecoration(
         color: KylosColors.surfaceDark.withOpacity(0.8),
         borderRadius: BorderRadius.circular(KylosRadius.s),
+        border: Border.all(color: KylosColors.buttonBorder.withOpacity(0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1076,8 +1315,14 @@ class _RatingChip extends StatelessWidget {
         vertical: KylosSpacing.xs,
       ),
       decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.2),
+        gradient: LinearGradient(
+          colors: [
+            Colors.amber.withOpacity(0.3),
+            Colors.orange.withOpacity(0.2),
+          ],
+        ),
         borderRadius: BorderRadius.circular(KylosRadius.s),
+        border: Border.all(color: Colors.amber.withOpacity(0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1113,7 +1358,12 @@ class _FormatChip extends StatelessWidget {
         vertical: KylosSpacing.xs,
       ),
       decoration: BoxDecoration(
-        color: is4K ? Colors.amber.shade700 : KylosColors.surfaceLight,
+        gradient: is4K
+            ? LinearGradient(
+                colors: [Colors.amber.shade700, Colors.orange.shade700],
+              )
+            : null,
+        color: is4K ? null : KylosColors.surfaceLight,
         borderRadius: BorderRadius.circular(KylosRadius.s),
       ),
       child: Text(
@@ -1121,45 +1371,9 @@ class _FormatChip extends StatelessWidget {
         style: KylosTvTextStyles.badge.copyWith(
           color: is4K ? Colors.white : KylosColors.textPrimary,
           fontSize: 12,
+          fontWeight: FontWeight.bold,
         ),
       ),
-    );
-  }
-}
-
-/// Info row for director/cast.
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 70,
-          child: Text(
-            label,
-            style: KylosTvTextStyles.metadata.copyWith(
-              color: KylosColors.textMuted,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: KylosTvTextStyles.metadata,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
     );
   }
 }

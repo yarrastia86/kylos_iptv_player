@@ -1,20 +1,23 @@
 // Kylos IPTV Player - Series Screen
-// Screen for browsing TV series content.
+// Screen for browsing TV series categories in a standardized grid layout.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/playlists/presentation/providers/playlist_providers.dart';
 import 'package:kylos_iptv_player/features/series/domain/entities/series_category.dart';
 import 'package:kylos_iptv_player/features/series/presentation/providers/series_providers.dart';
-import 'package:kylos_iptv_player/features/series/presentation/widgets/series_category_card.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
 
-/// TV Series screen.
+/// TV Series categories screen.
 ///
-/// Displays available TV series from the user's playlists
-/// organized by categories in a two-column layout.
+/// Shows categories in a 3-column grid layout with:
+/// - Single purpose: Pick a category
+/// - Full-width layout maximizing readability
+/// - Large touch targets for 10-foot viewing
+/// - Clear focus states for D-pad navigation
 class SeriesScreen extends ConsumerStatefulWidget {
   const SeriesScreen({super.key});
 
@@ -23,12 +26,20 @@ class SeriesScreen extends ConsumerStatefulWidget {
 }
 
 class _SeriesScreenState extends ConsumerState<SeriesScreen> {
+  final FocusNode _screenFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(seriesListNotifierProvider.notifier).loadCategories();
     });
+  }
+
+  @override
+  void dispose() {
+    _screenFocusNode.dispose();
+    super.dispose();
   }
 
   void _navigateToCategoryList(SeriesCategory category) {
@@ -47,60 +58,44 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
   }
 
   void _showOptionsMenu() {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: KylosColors.surfaceDark,
-        title: const Text(
+        title: Text(
           'Options',
-          style: TextStyle(color: KylosColors.textPrimary),
+          style: KylosTvTextStyles.sectionHeader,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading:
-                  const Icon(Icons.refresh, color: KylosColors.textSecondary),
-              title: const Text(
-                'Refresh',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.refresh,
+              label: 'Refresh',
               onTap: () {
                 Navigator.pop(context);
                 _handleRefresh();
               },
             ),
-            ListTile(
-              leading:
-                  const Icon(Icons.sort, color: KylosColors.textSecondary),
-              title: const Text(
-                'Sort',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.sort,
+              label: 'Sort',
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement sorting
+                _showSortDialog();
               },
             ),
-            ListTile(
-              leading:
-                  const Icon(Icons.settings, color: KylosColors.textSecondary),
-              title: const Text(
-                'Settings',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.settings,
+              label: 'Settings',
               onTap: () {
                 Navigator.pop(context);
                 context.push(Routes.settings);
               },
             ),
-            ListTile(
-              leading:
-                  const Icon(Icons.logout, color: KylosColors.textSecondary),
-              title: const Text(
-                'Logout',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.logout,
+              label: 'Logout',
               onTap: () {
                 Navigator.pop(context);
                 _handleLogout();
@@ -116,18 +111,56 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
     await ref.read(seriesListNotifierProvider.notifier).refresh();
   }
 
+  void _showSortDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: KylosColors.surfaceDark,
+        title: Text(
+          'Sort Categories',
+          style: KylosTvTextStyles.sectionHeader,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _OptionTile(
+              icon: Icons.sort_by_alpha,
+              label: 'Name (A-Z)',
+              onTap: () => Navigator.pop(context),
+            ),
+            _OptionTile(
+              icon: Icons.sort_by_alpha,
+              label: 'Name (Z-A)',
+              onTap: () => Navigator.pop(context),
+            ),
+            _OptionTile(
+              icon: Icons.numbers,
+              label: 'Series Count',
+              onTap: () => Navigator.pop(context),
+            ),
+            _OptionTile(
+              icon: Icons.restore,
+              label: 'Default',
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: KylosColors.surfaceDark,
-        title: const Text(
+        title: Text(
           'Logout',
-          style: TextStyle(color: KylosColors.textPrimary),
+          style: KylosTvTextStyles.sectionHeader,
         ),
-        content: const Text(
+        content: Text(
           'Are you sure you want to logout? This will clear your active playlist.',
-          style: TextStyle(color: KylosColors.textSecondary),
+          style: KylosTvTextStyles.body,
         ),
         actions: [
           TextButton(
@@ -155,30 +188,46 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
     context.go(Routes.dashboard);
   }
 
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _handleBack();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final seriesState = ref.watch(seriesListNotifierProvider);
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              KylosColors.backgroundStart,
-              KylosColors.backgroundEnd,
-            ],
+    return Focus(
+      focusNode: _screenFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                KylosColors.backgroundStart,
+                KylosColors.backgroundEnd,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              Expanded(
-                child: _buildContent(seriesState),
-              ),
-            ],
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: _buildContent(seriesState),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -188,36 +237,31 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: KylosSpacing.m,
-        vertical: KylosSpacing.s,
+        horizontal: KylosSpacing.xl,
+        vertical: KylosSpacing.m,
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: KylosColors.textPrimary),
+          _FocusableIconButton(
+            icon: Icons.arrow_back,
             onPressed: _handleBack,
             tooltip: 'Back',
           ),
-          const Expanded(
-            child: Center(
-              child: Text(
-                'SERIES',
-                style: TextStyle(
-                  color: KylosColors.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
+          const SizedBox(width: KylosSpacing.m),
+          Expanded(
+            child: Text(
+              'SERIES',
+              style: KylosTvTextStyles.screenTitle,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.search, color: KylosColors.textSecondary),
+          _FocusableIconButton(
+            icon: Icons.search,
             onPressed: _handleSearch,
             tooltip: 'Search',
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: KylosColors.textSecondary),
+          const SizedBox(width: KylosSpacing.s),
+          _FocusableIconButton(
+            icon: Icons.more_vert,
             onPressed: _handleMore,
             tooltip: 'More options',
           ),
@@ -236,88 +280,113 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
     }
 
     if (state.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: KylosColors.textMuted,
-            ),
-            const SizedBox(height: KylosSpacing.m),
-            const Text(
-              'Failed to load categories',
-              style: TextStyle(
-                color: KylosColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: KylosSpacing.xs),
-            Text(
-              state.error!,
-              style: const TextStyle(
-                color: KylosColors.textMuted,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: KylosSpacing.l),
-            FilledButton.icon(
-              onPressed: () {
-                ref.read(seriesListNotifierProvider.notifier).loadCategories();
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      return _buildErrorState(state.error!);
     }
 
     if (state.categories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(
-              Icons.tv_off,
-              size: 64,
-              color: KylosColors.textMuted,
-            ),
-            SizedBox(height: KylosSpacing.m),
-            Text(
-              'No series available',
-              style: TextStyle(
-                color: KylosColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            SizedBox(height: KylosSpacing.xs),
-            Text(
-              'Add a playlist with series content',
-              style: TextStyle(
-                color: KylosColors.textMuted,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState();
     }
 
-    // Build categories with ALL and FAVOURITES at top
     final categories = _buildCategoriesWithSpecial(state);
+    return _buildCategoryGrid(categories);
+  }
 
-    return _buildCategoryList(categories);
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: KylosColors.textMuted,
+          ),
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'Failed to load categories',
+            style: KylosTvTextStyles.sectionHeader.copyWith(
+              color: KylosColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            error,
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: KylosSpacing.xl),
+          _FocusableButton(
+            icon: Icons.refresh,
+            label: 'Retry',
+            onPressed: () {
+              ref.read(seriesListNotifierProvider.notifier).loadCategories();
+            },
+            autofocus: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.tv_off_outlined,
+            size: 64,
+            color: KylosColors.textMuted,
+          ),
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'No series available',
+            style: KylosTvTextStyles.sectionHeader.copyWith(
+              color: KylosColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            'Add a playlist with series content',
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryGrid(List<SeriesCategory> categories) {
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(
+        horizontal: KylosSpacing.xl,
+        vertical: KylosSpacing.m,
+      ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: KylosSpacing.m,
+        crossAxisSpacing: KylosSpacing.m,
+        childAspectRatio: 2.8,
+      ),
+      itemCount: categories.length,
+      itemBuilder: (context, index) {
+        final category = categories[index];
+        return _CategoryTile(
+          category: category,
+          autofocus: index == 0,
+          onSelect: () => _navigateToCategoryList(category),
+        );
+      },
+    );
   }
 
   List<SeriesCategory> _buildCategoriesWithSpecial(SeriesListState state) {
     final allCategory = SeriesCategory(
       id: 'all',
-      name: 'ALL',
+      name: 'ALL SERIES',
       seriesCount: state.allSeriesCount,
       sortOrder: -2,
     );
@@ -332,44 +401,392 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
 
     return [allCategory, favoritesCategory, ...state.categories];
   }
+}
 
-  Widget _buildCategoryList(List<SeriesCategory> categories) {
-    final rowCount = (categories.length / 2).ceil();
+/// Category tile widget for the grid.
+class _CategoryTile extends StatefulWidget {
+  const _CategoryTile({
+    required this.category,
+    required this.onSelect,
+    this.autofocus = false,
+  });
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemCount: rowCount,
-      cacheExtent: 500,
-      itemBuilder: (context, rowIndex) {
-        final leftIndex = rowIndex * 2;
-        final rightIndex = leftIndex + 1;
-        final hasRight = rightIndex < categories.length;
+  final SeriesCategory category;
+  final VoidCallback onSelect;
+  final bool autofocus;
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: SeriesCategoryCard(
-                  category: categories[leftIndex],
-                  onTap: () => _navigateToCategoryList(categories[leftIndex]),
-                  autofocus: leftIndex == 0,
+  @override
+  State<_CategoryTile> createState() => _CategoryTileState();
+}
+
+class _CategoryTileState extends State<_CategoryTile>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: KylosDurations.fast,
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.05,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onSelect();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _onFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSpecial =
+        widget.category.id == 'all' || widget.category.id == 'favorites';
+
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: _onFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onSelect,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnimation.value,
+              child: AnimatedContainer(
+                duration: KylosDurations.fast,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: KylosSpacing.l,
+                  vertical: KylosSpacing.m,
+                ),
+                decoration: BoxDecoration(
+                  gradient: _isFocused
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            KylosColors.seriesGlow.withOpacity(0.4),
+                            KylosColors.seriesGlow.withOpacity(0.15),
+                          ],
+                        )
+                      : isSpecial
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: widget.category.id == 'favorites'
+                                  ? [
+                                      Colors.red.shade900.withOpacity(0.4),
+                                      Colors.red.shade900.withOpacity(0.2),
+                                    ]
+                                  : [
+                                      KylosColors.surfaceLight,
+                                      KylosColors.surfaceDark,
+                                    ],
+                            )
+                          : null,
+                  color: _isFocused || isSpecial ? null : KylosColors.surfaceDark,
+                  borderRadius: BorderRadius.circular(KylosRadius.l),
+                  border: _isFocused
+                      ? Border.all(color: KylosColors.seriesGlow, width: 3)
+                      : Border.all(
+                          color: KylosColors.buttonBorder,
+                          width: 1,
+                        ),
+                  boxShadow: _isFocused
+                      ? [
+                          BoxShadow(
+                            color: KylosColors.seriesGlow.withOpacity(0.4),
+                            blurRadius: 20,
+                            spreadRadius: 4,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      padding: const EdgeInsets.all(KylosSpacing.s),
+                      decoration: BoxDecoration(
+                        color: _isFocused
+                            ? KylosColors.seriesGlow.withOpacity(0.3)
+                            : KylosColors.surfaceOverlay,
+                        borderRadius: BorderRadius.circular(KylosRadius.m),
+                      ),
+                      child: Icon(
+                        widget.category.id == 'favorites'
+                            ? Icons.favorite
+                            : widget.category.id == 'all'
+                                ? Icons.video_library
+                                : Icons.folder_outlined,
+                        color: _isFocused
+                            ? KylosColors.seriesGlow
+                            : widget.category.id == 'favorites'
+                                ? Colors.redAccent.shade200
+                                : KylosColors.textSecondary,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: KylosSpacing.m),
+                    // Name and count
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.category.name,
+                            style: KylosTvTextStyles.cardTitle.copyWith(
+                              color: _isFocused
+                                  ? KylosColors.seriesGlow
+                                  : KylosColors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.category.seriesCount > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_formatCount(widget.category.seriesCount)} series',
+                              style: KylosTvTextStyles.cardSubtitle.copyWith(
+                                color: _isFocused
+                                    ? KylosColors.seriesGlow.withOpacity(0.8)
+                                    : KylosColors.textMuted,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Arrow
+                    Icon(
+                      Icons.chevron_right,
+                      color: _isFocused
+                          ? KylosColors.seriesGlow
+                          : KylosColors.textMuted,
+                      size: 28,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: hasRight
-                    ? SeriesCategoryCard(
-                        category: categories[rightIndex],
-                        onTap: () =>
-                            _navigateToCategoryList(categories[rightIndex]),
-                      )
-                    : const SizedBox.shrink(),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    }
+    return count.toString();
+  }
+}
+
+/// Option tile for the options menu.
+class _OptionTile extends StatelessWidget {
+  const _OptionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: KylosColors.textSecondary),
+      title: Text(
+        label,
+        style: KylosTvTextStyles.body.copyWith(
+          color: KylosColors.textPrimary,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+/// A focusable icon button for the top bar.
+class _FocusableIconButton extends StatefulWidget {
+  const _FocusableIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  State<_FocusableIconButton> createState() => _FocusableIconButtonState();
+}
+
+class _FocusableIconButtonState extends State<_FocusableIconButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Tooltip(
+          message: widget.tooltip ?? '',
+          child: AnimatedContainer(
+            duration: KylosDurations.fast,
+            padding: const EdgeInsets.all(KylosSpacing.s),
+            decoration: BoxDecoration(
+              color: _isFocused
+                  ? KylosColors.seriesGlow.withOpacity(0.2)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(KylosRadius.s),
+              border: _isFocused
+                  ? Border.all(color: KylosColors.seriesGlow, width: 2)
+                  : null,
+            ),
+            child: Icon(
+              widget.icon,
+              color:
+                  _isFocused ? KylosColors.seriesGlow : KylosColors.textSecondary,
+              size: 28,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A focusable button for actions.
+class _FocusableButton extends StatefulWidget {
+  const _FocusableButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.autofocus = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool autofocus;
+
+  @override
+  State<_FocusableButton> createState() => _FocusableButtonState();
+}
+
+class _FocusableButtonState extends State<_FocusableButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: KylosDurations.fast,
+          padding: const EdgeInsets.symmetric(
+            horizontal: KylosSpacing.l,
+            vertical: KylosSpacing.m,
+          ),
+          decoration: BoxDecoration(
+            color: _isFocused ? KylosColors.seriesGlow : KylosColors.surfaceLight,
+            borderRadius: BorderRadius.circular(KylosRadius.m),
+            border: _isFocused
+                ? Border.all(color: KylosColors.seriesGlow, width: 2)
+                : Border.all(color: KylosColors.buttonBorder, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                color: _isFocused ? Colors.white : KylosColors.textSecondary,
+                size: 22,
+              ),
+              const SizedBox(width: KylosSpacing.s),
+              Text(
+                widget.label,
+                style: KylosTvTextStyles.button.copyWith(
+                  color: _isFocused ? Colors.white : KylosColors.textSecondary,
+                ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

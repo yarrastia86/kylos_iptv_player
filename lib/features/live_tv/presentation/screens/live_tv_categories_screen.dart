@@ -1,21 +1,23 @@
 // Kylos IPTV Player - Live TV Categories Screen
-// Screen displaying Live TV categories in a two-column layout.
+// Screen displaying Live TV categories in a standardized grid layout.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/live_tv/domain/entities/channel_category.dart';
 import 'package:kylos_iptv_player/features/live_tv/presentation/providers/channel_providers.dart';
-import 'package:kylos_iptv_player/features/live_tv/presentation/widgets/live_tv_category_card.dart';
-import 'package:kylos_iptv_player/features/live_tv/presentation/widgets/live_tv_overflow_menu.dart';
 import 'package:kylos_iptv_player/features/playlists/presentation/providers/playlist_providers.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
 
 /// Screen displaying Live TV categories.
 ///
-/// Shows categories in a two-column layout on wide screens,
-/// single column on narrow screens.
+/// Shows categories in a 3-column grid layout with:
+/// - Single purpose: Pick a category
+/// - Full-width layout maximizing readability
+/// - Large touch targets for 10-foot viewing
+/// - Clear focus states for D-pad navigation
 class LiveTvCategoriesScreen extends ConsumerStatefulWidget {
   const LiveTvCategoriesScreen({super.key});
 
@@ -26,13 +28,20 @@ class LiveTvCategoriesScreen extends ConsumerStatefulWidget {
 
 class _LiveTvCategoriesScreenState
     extends ConsumerState<LiveTvCategoriesScreen> {
+  final FocusNode _screenFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
-    // Load categories when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(channelListNotifierProvider.notifier).loadChannels();
     });
+  }
+
+  @override
+  void dispose() {
+    _screenFocusNode.dispose();
+    super.dispose();
   }
 
   void _navigateToChannelList(ChannelCategory category) {
@@ -46,28 +55,66 @@ class _LiveTvCategoriesScreenState
     context.push(Routes.search);
   }
 
-  Future<void> _handleMore() async {
-    final selectedItemId = await showLiveTvOverflowMenu(context);
-    if (selectedItemId == null || !mounted) return;
-
-    switch (selectedItemId) {
-      case 'home':
-        _handleNavigateHome();
-      case 'refresh_content':
-        await _handleRefreshContent();
-      case 'refresh_epg':
-        await _handleRefreshEpg();
-      case 'sort':
-        _handleShowSortOptions();
-      case 'settings':
-        _handleNavigateSettings();
-      case 'logout':
-        await _handleLogout();
-    }
+  void _handleMore() {
+    _showOptionsMenu();
   }
 
-  void _handleNavigateHome() {
-    context.go(Routes.dashboard);
+  void _showOptionsMenu() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: KylosColors.surfaceDark,
+        title: Text(
+          'Options',
+          style: KylosTvTextStyles.sectionHeader,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _OptionTile(
+              icon: Icons.refresh,
+              label: 'Refresh Content',
+              onTap: () {
+                Navigator.pop(context);
+                _handleRefreshContent();
+              },
+            ),
+            _OptionTile(
+              icon: Icons.schedule,
+              label: 'Refresh EPG',
+              onTap: () {
+                Navigator.pop(context);
+                _handleRefreshEpg();
+              },
+            ),
+            _OptionTile(
+              icon: Icons.sort,
+              label: 'Sort',
+              onTap: () {
+                Navigator.pop(context);
+                _showSortDialog();
+              },
+            ),
+            _OptionTile(
+              icon: Icons.settings,
+              label: 'Settings',
+              onTap: () {
+                Navigator.pop(context);
+                context.push(Routes.settings);
+              },
+            ),
+            _OptionTile(
+              icon: Icons.logout,
+              label: 'Logout',
+              onTap: () {
+                Navigator.pop(context);
+                _handleLogout();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _handleRefreshContent() async {
@@ -78,12 +125,42 @@ class _LiveTvCategoriesScreenState
     await ref.read(channelEpgNotifierProvider.notifier).refresh();
   }
 
-  void _handleShowSortOptions() {
-    _showSortDialog();
-  }
-
-  void _handleNavigateSettings() {
-    context.push(Routes.settings);
+  void _showSortDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: KylosColors.surfaceDark,
+        title: Text(
+          'Sort Categories',
+          style: KylosTvTextStyles.sectionHeader,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _OptionTile(
+              icon: Icons.sort_by_alpha,
+              label: 'Name (A-Z)',
+              onTap: () => Navigator.pop(context),
+            ),
+            _OptionTile(
+              icon: Icons.sort_by_alpha,
+              label: 'Name (Z-A)',
+              onTap: () => Navigator.pop(context),
+            ),
+            _OptionTile(
+              icon: Icons.numbers,
+              label: 'Channel Count',
+              onTap: () => Navigator.pop(context),
+            ),
+            _OptionTile(
+              icon: Icons.restore,
+              label: 'Default',
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _handleLogout() async {
@@ -91,13 +168,13 @@ class _LiveTvCategoriesScreenState
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: KylosColors.surfaceDark,
-        title: const Text(
+        title: Text(
           'Logout',
-          style: TextStyle(color: KylosColors.textPrimary),
+          style: KylosTvTextStyles.sectionHeader,
         ),
-        content: const Text(
+        content: Text(
           'Are you sure you want to logout? This will clear your active playlist.',
-          style: TextStyle(color: KylosColors.textSecondary),
+          style: KylosTvTextStyles.body,
         ),
         actions: [
           TextButton(
@@ -116,81 +193,55 @@ class _LiveTvCategoriesScreenState
     );
 
     if ((shouldLogout ?? false) && mounted) {
-      // Clear active playlist
       ref.read(activePlaylistNotifierProvider.notifier).clearActivePlaylist();
-
-      // Navigate to onboarding
       context.go(Routes.onboarding);
     }
-  }
-
-  void _showSortDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: KylosColors.surfaceDark,
-        title: const Text(
-          'Sort Categories',
-          style: TextStyle(color: KylosColors.textPrimary),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSortOption('Name (A-Z)', Icons.sort_by_alpha, 'name_asc'),
-            _buildSortOption('Name (Z-A)', Icons.sort_by_alpha, 'name_desc'),
-            _buildSortOption('Channel Count', Icons.numbers, 'count'),
-            _buildSortOption('Default', Icons.restore, 'default'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSortOption(String label, IconData icon, String sortType) {
-    return ListTile(
-      leading: Icon(icon, color: KylosColors.textSecondary),
-      title: Text(
-        label,
-        style: const TextStyle(color: KylosColors.textPrimary),
-      ),
-      onTap: () {
-        Navigator.pop(context);
-        // TODO: Implement actual sorting logic
-      },
-    );
   }
 
   void _handleBack() {
     context.go(Routes.dashboard);
   }
 
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _handleBack();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final channelState = ref.watch(channelListNotifierProvider);
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              KylosColors.backgroundStart,
-              KylosColors.backgroundEnd,
-            ],
+    return Focus(
+      focusNode: _screenFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                KylosColors.backgroundStart,
+                KylosColors.backgroundEnd,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Top bar
-              _buildTopBar(),
-
-              // Main content
-              Expanded(
-                child: _buildContent(channelState),
-              ),
-            ],
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: _buildContent(channelState),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -200,42 +251,31 @@ class _LiveTvCategoriesScreenState
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: KylosSpacing.m,
-        vertical: KylosSpacing.s,
+        horizontal: KylosSpacing.xl,
+        vertical: KylosSpacing.m,
       ),
       child: Row(
         children: [
-          // Back button
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: KylosColors.textPrimary),
+          _FocusableIconButton(
+            icon: Icons.arrow_back,
             onPressed: _handleBack,
             tooltip: 'Back',
           ),
-
-          // Title centered
-          const Expanded(
-            child: Center(
-              child: Text(
-                'LIVE TV',
-                style: TextStyle(
-                  color: KylosColors.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
+          const SizedBox(width: KylosSpacing.m),
+          Expanded(
+            child: Text(
+              'LIVE TV',
+              style: KylosTvTextStyles.screenTitle,
             ),
           ),
-
-          // Search and menu buttons
-          IconButton(
-            icon:
-                const Icon(Icons.search, color: KylosColors.textSecondary),
+          _FocusableIconButton(
+            icon: Icons.search,
             onPressed: _handleSearch,
             tooltip: 'Search',
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: KylosColors.textSecondary),
+          const SizedBox(width: KylosSpacing.s),
+          _FocusableIconButton(
+            icon: Icons.more_vert,
             onPressed: _handleMore,
             tooltip: 'More options',
           ),
@@ -254,141 +294,513 @@ class _LiveTvCategoriesScreenState
     }
 
     if (state.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: KylosColors.textMuted,
-            ),
-            const SizedBox(height: KylosSpacing.m),
-            Text(
-              'Failed to load categories',
-              style: const TextStyle(
-                color: KylosColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: KylosSpacing.xs),
-            Text(
-              state.error!,
-              style: const TextStyle(
-                color: KylosColors.textMuted,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: KylosSpacing.l),
-            FilledButton.icon(
-              onPressed: () {
-                ref.read(channelListNotifierProvider.notifier).loadChannels();
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      return _buildErrorState(state.error!);
     }
 
     if (state.categories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.folder_open,
-              size: 64,
-              color: KylosColors.textMuted,
-            ),
-            const SizedBox(height: KylosSpacing.m),
-            const Text(
-              'No categories available',
-              style: TextStyle(
-                color: KylosColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: KylosSpacing.xs),
-            const Text(
-              'Add a playlist to start watching',
-              style: TextStyle(
-                color: KylosColors.textMuted,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState();
     }
 
-    // Build categories with ALL and FAVOURITES at top
     final categories = _buildCategoriesWithSpecial(state);
+    return _buildCategoryGrid(categories);
+  }
 
-    return _buildHorizontalLayout(categories);
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: KylosColors.textMuted,
+          ),
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'Failed to load categories',
+            style: KylosTvTextStyles.sectionHeader.copyWith(
+              color: KylosColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            error,
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: KylosSpacing.xl),
+          _FocusableButton(
+            icon: Icons.refresh,
+            label: 'Retry',
+            onPressed: () {
+              ref.read(channelListNotifierProvider.notifier).loadChannels();
+            },
+            autofocus: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.live_tv_outlined,
+            size: 64,
+            color: KylosColors.textMuted,
+          ),
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'No channels available',
+            style: KylosTvTextStyles.sectionHeader.copyWith(
+              color: KylosColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            'Add a playlist with Live TV content',
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryGrid(List<ChannelCategory> categories) {
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(
+        horizontal: KylosSpacing.xl,
+        vertical: KylosSpacing.m,
+      ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: KylosSpacing.m,
+        crossAxisSpacing: KylosSpacing.m,
+        childAspectRatio: 2.8,
+      ),
+      itemCount: categories.length,
+      itemBuilder: (context, index) {
+        final category = categories[index];
+        return _CategoryTile(
+          category: category,
+          autofocus: index == 0,
+          onSelect: () => _navigateToChannelList(category),
+        );
+      },
+    );
   }
 
   List<ChannelCategory> _buildCategoriesWithSpecial(ChannelListState state) {
-    // Create special categories
     final allCategory = ChannelCategory(
       id: 'all',
-      name: 'ALL',
-      channelCount: state.allChannelsCount, // Use allChannelsCount, not totalCount
+      name: 'ALL CHANNELS',
+      channelCount: state.allChannelsCount,
       sortOrder: -2,
     );
 
     final favoritesCategory = ChannelCategory(
       id: 'favorites',
       name: 'FAVORITES',
-      channelCount: state.favoritesCount, // Use favoritesCount from state (source of truth)
+      channelCount: state.favoritesCount,
       sortOrder: -1,
       isFavorite: true,
     );
 
-    // Combine: ALL, FAVORITES, then rest of categories
     return [allCategory, favoritesCategory, ...state.categories];
   }
+}
 
-  Widget _buildHorizontalLayout(List<ChannelCategory> categories) {
-    final rowCount = (categories.length / 2).ceil();
+/// Category tile widget for the grid.
+class _CategoryTile extends StatefulWidget {
+  const _CategoryTile({
+    required this.category,
+    required this.onSelect,
+    this.autofocus = false,
+  });
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemCount: rowCount,
-      cacheExtent: 500,
-      itemBuilder: (context, rowIndex) {
-        final leftIndex = rowIndex * 2;
-        final rightIndex = leftIndex + 1;
-        final hasRight = rightIndex < categories.length;
+  final ChannelCategory category;
+  final VoidCallback onSelect;
+  final bool autofocus;
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: LiveTvCategoryCard(
-                  category: categories[leftIndex],
-                  onTap: () => _navigateToChannelList(categories[leftIndex]),
-                  autofocus: leftIndex == 0,
+  @override
+  State<_CategoryTile> createState() => _CategoryTileState();
+}
+
+class _CategoryTileState extends State<_CategoryTile>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: KylosDurations.fast,
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.05,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onSelect();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _onFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSpecial =
+        widget.category.id == 'all' || widget.category.id == 'favorites';
+
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: _onFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onSelect,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnimation.value,
+              child: AnimatedContainer(
+                duration: KylosDurations.fast,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: KylosSpacing.l,
+                  vertical: KylosSpacing.m,
+                ),
+                decoration: BoxDecoration(
+                  gradient: _isFocused
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            KylosColors.liveTvGlow.withOpacity(0.4),
+                            KylosColors.liveTvGlow.withOpacity(0.15),
+                          ],
+                        )
+                      : isSpecial
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: widget.category.id == 'favorites'
+                                  ? [
+                                      Colors.red.shade900.withOpacity(0.4),
+                                      Colors.red.shade900.withOpacity(0.2),
+                                    ]
+                                  : [
+                                      KylosColors.surfaceLight,
+                                      KylosColors.surfaceDark,
+                                    ],
+                            )
+                          : null,
+                  color: _isFocused || isSpecial ? null : KylosColors.surfaceDark,
+                  borderRadius: BorderRadius.circular(KylosRadius.l),
+                  border: _isFocused
+                      ? Border.all(color: KylosColors.liveTvGlow, width: 3)
+                      : Border.all(
+                          color: KylosColors.buttonBorder,
+                          width: 1,
+                        ),
+                  boxShadow: _isFocused
+                      ? [
+                          BoxShadow(
+                            color: KylosColors.liveTvGlow.withOpacity(0.4),
+                            blurRadius: 20,
+                            spreadRadius: 4,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      padding: const EdgeInsets.all(KylosSpacing.s),
+                      decoration: BoxDecoration(
+                        color: _isFocused
+                            ? KylosColors.liveTvGlow.withOpacity(0.3)
+                            : KylosColors.surfaceOverlay,
+                        borderRadius: BorderRadius.circular(KylosRadius.m),
+                      ),
+                      child: Icon(
+                        widget.category.id == 'favorites'
+                            ? Icons.favorite
+                            : widget.category.id == 'all'
+                                ? Icons.live_tv
+                                : Icons.folder_outlined,
+                        color: _isFocused
+                            ? KylosColors.liveTvGlow
+                            : widget.category.id == 'favorites'
+                                ? Colors.redAccent.shade200
+                                : KylosColors.textSecondary,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: KylosSpacing.m),
+                    // Name and count
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.category.name,
+                            style: KylosTvTextStyles.cardTitle.copyWith(
+                              color: _isFocused
+                                  ? KylosColors.liveTvGlow
+                                  : KylosColors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.category.channelCount > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_formatCount(widget.category.channelCount)} channels',
+                              style: KylosTvTextStyles.cardSubtitle.copyWith(
+                                color: _isFocused
+                                    ? KylosColors.liveTvGlow.withOpacity(0.8)
+                                    : KylosColors.textMuted,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Arrow
+                    Icon(
+                      Icons.chevron_right,
+                      color: _isFocused
+                          ? KylosColors.liveTvGlow
+                          : KylosColors.textMuted,
+                      size: 28,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: hasRight
-                    ? LiveTvCategoryCard(
-                        category: categories[rightIndex],
-                        onTap: () => _navigateToChannelList(categories[rightIndex]),
-                      )
-                    : const SizedBox.shrink(),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    }
+    return count.toString();
+  }
+}
+
+/// Option tile for the options menu.
+class _OptionTile extends StatelessWidget {
+  const _OptionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: KylosColors.textSecondary),
+      title: Text(
+        label,
+        style: KylosTvTextStyles.body.copyWith(
+          color: KylosColors.textPrimary,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+/// A focusable icon button for the top bar.
+class _FocusableIconButton extends StatefulWidget {
+  const _FocusableIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  State<_FocusableIconButton> createState() => _FocusableIconButtonState();
+}
+
+class _FocusableIconButtonState extends State<_FocusableIconButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Tooltip(
+          message: widget.tooltip ?? '',
+          child: AnimatedContainer(
+            duration: KylosDurations.fast,
+            padding: const EdgeInsets.all(KylosSpacing.s),
+            decoration: BoxDecoration(
+              color: _isFocused
+                  ? KylosColors.liveTvGlow.withOpacity(0.2)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(KylosRadius.s),
+              border: _isFocused
+                  ? Border.all(color: KylosColors.liveTvGlow, width: 2)
+                  : null,
+            ),
+            child: Icon(
+              widget.icon,
+              color:
+                  _isFocused ? KylosColors.liveTvGlow : KylosColors.textSecondary,
+              size: 28,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A focusable button for actions.
+class _FocusableButton extends StatefulWidget {
+  const _FocusableButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.autofocus = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool autofocus;
+
+  @override
+  State<_FocusableButton> createState() => _FocusableButtonState();
+}
+
+class _FocusableButtonState extends State<_FocusableButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: KylosDurations.fast,
+          padding: const EdgeInsets.symmetric(
+            horizontal: KylosSpacing.l,
+            vertical: KylosSpacing.m,
+          ),
+          decoration: BoxDecoration(
+            color: _isFocused ? KylosColors.liveTvGlow : KylosColors.surfaceLight,
+            borderRadius: BorderRadius.circular(KylosRadius.m),
+            border: _isFocused
+                ? Border.all(color: KylosColors.liveTvGlow, width: 2)
+                : Border.all(color: KylosColors.buttonBorder, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                color: _isFocused ? Colors.white : KylosColors.textSecondary,
+                size: 22,
+              ),
+              const SizedBox(width: KylosSpacing.s),
+              Text(
+                widget.label,
+                style: KylosTvTextStyles.button.copyWith(
+                  color: _isFocused ? Colors.white : KylosColors.textSecondary,
+                ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

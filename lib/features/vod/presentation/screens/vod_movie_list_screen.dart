@@ -1,5 +1,5 @@
 // Kylos IPTV Player - VOD Movie List Screen
-// Screen for displaying movies in a category with full-width poster grid.
+// Screen for displaying movies in a category with a proper aligned grid.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,9 +14,10 @@ import 'package:kylos_iptv_player/navigation/routes.dart';
 /// Screen for displaying movies in a category.
 ///
 /// Features a lean-back TV-optimized layout with:
-/// - Full-width horizontal scrolling rows of movie posters
+/// - Proper rectangular grid with uniform spacing
+/// - Responsive column count based on screen width
+/// - Symmetric padding on all sides
 /// - Press Select to view movie details
-/// - Clean, uncluttered interface optimized for 10-foot viewing
 class VodMovieListScreen extends ConsumerStatefulWidget {
   const VodMovieListScreen({
     super.key,
@@ -24,10 +25,7 @@ class VodMovieListScreen extends ConsumerStatefulWidget {
     this.categoryName,
   });
 
-  /// The ID of the category to display movies for.
   final String categoryId;
-
-  /// Optional display name of the category.
   final String? categoryName;
 
   @override
@@ -38,24 +36,30 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _screenFocusNode = FocusNode();
 
-  // Grid configuration - larger cards for TV
-  static const _cardWidth = 150.0;
-  static const _cardSpacing = 15.0;
-  static const _rowHeight = 180.0 + 15.0; // Card height (180*1.5) + padding
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMovies();
     });
+
+    // Add scroll listener for pagination
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _screenFocusNode.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 500) {
+      ref.read(movieListNotifierProvider.notifier).loadNextPage();
+    }
   }
 
   Future<void> _loadMovies() async {
@@ -74,7 +78,6 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // Handle back button
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
       _handleBack();
@@ -85,7 +88,6 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
   }
 
   void _onMovieSelect(VodMovie movie) {
-    // Navigate to movie details screen
     context.push(Routes.movieDetailPath(movie.id));
   }
 
@@ -93,24 +95,15 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
     ref.read(movieListNotifierProvider.notifier).toggleFavorite(movie.id);
   }
 
-  /// Calculate how many movies fit per row based on available width.
-  int _calculateMoviesPerRow(double availableWidth) {
-    const totalCardWidth = _cardWidth + _cardSpacing;
-    return ((availableWidth - KylosSpacing.xxl * 2) / totalCardWidth)
-        .floor()
-        .clamp(3, 8);
-  }
-
-  /// Group movies into rows for horizontal scrolling.
-  List<List<VodMovie>> _groupMoviesIntoRows(
-      List<VodMovie> movies, int moviesPerRow) {
-    final rows = <List<VodMovie>>[];
-    for (var i = 0; i < movies.length; i += moviesPerRow) {
-      final end =
-          (i + moviesPerRow < movies.length) ? i + moviesPerRow : movies.length;
-      rows.add(movies.sublist(i, end));
-    }
-    return rows;
+  /// Calculate the number of columns based on screen width.
+  /// Returns responsive column count for different device sizes.
+  int _calculateColumnCount(double screenWidth) {
+    if (screenWidth >= 1400) return 7; // Large TV
+    if (screenWidth >= 1200) return 6; // TV
+    if (screenWidth >= 900) return 5;  // Large tablet landscape
+    if (screenWidth >= 700) return 4;  // Tablet
+    if (screenWidth >= 500) return 3;  // Large phone landscape
+    return 2; // Phone portrait
   }
 
   @override
@@ -150,7 +143,7 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: KylosSpacing.l,
+        horizontal: KylosSpacing.xl,
         vertical: KylosSpacing.m,
       ),
       child: Row(
@@ -165,6 +158,8 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
             child: Text(
               widget.categoryName?.toUpperCase() ?? 'MOVIES',
               style: KylosTvTextStyles.screenTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           _FocusableIconButton(
@@ -199,37 +194,40 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
 
   Widget _buildErrorState(String error) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: KylosColors.textMuted,
-          ),
-          const SizedBox(height: KylosSpacing.m),
-          Text(
-            'Failed to load movies',
-            style: KylosTvTextStyles.sectionHeader.copyWith(
-              color: KylosColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: KylosSpacing.xs),
-          Text(
-            error,
-            style: KylosTvTextStyles.body.copyWith(
+      child: Padding(
+        padding: const EdgeInsets.all(KylosSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 64,
               color: KylosColors.textMuted,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: KylosSpacing.xl),
-          _FocusableButton(
-            icon: Icons.refresh,
-            label: 'Retry',
-            onPressed: _loadMovies,
-            autofocus: true,
-          ),
-        ],
+            const SizedBox(height: KylosSpacing.m),
+            Text(
+              'Failed to load movies',
+              style: KylosTvTextStyles.sectionHeader.copyWith(
+                color: KylosColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: KylosSpacing.xs),
+            Text(
+              error,
+              style: KylosTvTextStyles.body.copyWith(
+                color: KylosColors.textMuted,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: KylosSpacing.xl),
+            _FocusableButton(
+              icon: Icons.refresh,
+              label: 'Retry',
+              onPressed: _loadMovies,
+              autofocus: true,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -259,69 +257,94 @@ class _VodMovieListScreenState extends ConsumerState<VodMovieListScreen> {
   Widget _buildMovieGrid(MovieListState state) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final moviesPerRow = _calculateMoviesPerRow(constraints.maxWidth);
-        final movieRows = _groupMoviesIntoRows(state.movies, moviesPerRow);
+        final screenWidth = constraints.maxWidth;
+        final columnCount = _calculateColumnCount(screenWidth);
 
-        return NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollEndNotification) {
-              final metrics = notification.metrics;
-              if (metrics.pixels >= metrics.maxScrollExtent - 300) {
-                ref.read(movieListNotifierProvider.notifier).loadNextPage();
-              }
-            }
-            return false;
-          },
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(vertical: KylosSpacing.m),
-            itemCount: movieRows.length + (state.isLoadingMore ? 1 : 0),
-            itemBuilder: (context, rowIndex) {
-              if (rowIndex >= movieRows.length) {
-                return const Padding(
-                  padding: EdgeInsets.all(KylosSpacing.xl),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: KylosColors.tvAccent,
-                    ),
-                  ),
-                );
-              }
+        // Calculate card dimensions for proper aspect ratio (2:3 poster)
+        // Account for horizontal padding and spacing between cards
+        const horizontalPadding = KylosSpacing.xl; // 32px on each side
+        const gridSpacing = KylosSpacing.m; // 16px between cards
 
-              final row = movieRows[rowIndex];
-              return _buildMovieRow(row, rowIndex, rowIndex == 0);
-            },
+        final totalHorizontalPadding = horizontalPadding * 2;
+        final totalSpacing = gridSpacing * (columnCount - 1);
+        final availableWidth = screenWidth - totalHorizontalPadding - totalSpacing;
+        final cardWidth = availableWidth / columnCount;
+
+        // Poster aspect ratio is 2:3, plus space for title below
+        // Card height = poster height + title area
+        final posterHeight = cardWidth * 1.5;
+        final titleAreaHeight = 60.0; // Fixed space for title and year
+        final cardHeight = posterHeight + titleAreaHeight;
+
+        return GridView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: KylosSpacing.m,
           ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnCount,
+            mainAxisSpacing: gridSpacing,
+            crossAxisSpacing: gridSpacing,
+            childAspectRatio: cardWidth / cardHeight,
+          ),
+          itemCount: state.movies.length + (state.isLoadingMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            // Show loading indicator at the end
+            if (index >= state.movies.length) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(KylosSpacing.l),
+                  child: CircularProgressIndicator(
+                    color: KylosColors.tvAccent,
+                    strokeWidth: 2,
+                  ),
+                ),
+              );
+            }
+
+            final movie = state.movies[index];
+            return _MovieGridCard(
+              movie: movie,
+              autofocus: index == 0,
+              onSelect: () => _onMovieSelect(movie),
+              onLongPress: () => _onMovieFavoriteToggle(movie),
+            );
+          },
         );
       },
     );
   }
+}
 
-  Widget _buildMovieRow(List<VodMovie> movies, int rowIndex, bool autofocusFirst) {
-    return SizedBox(
-      height: _rowHeight,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: KylosSpacing.xxl),
-        itemCount: movies.length,
-        itemBuilder: (context, index) {
-          final movie = movies[index];
-          final isFirst = rowIndex == 0 && index == 0;
+/// Movie card optimized for grid display.
+/// Uses the existing MoviePosterCard but ensures proper sizing.
+class _MovieGridCard extends StatelessWidget {
+  const _MovieGridCard({
+    required this.movie,
+    required this.onSelect,
+    this.onLongPress,
+    this.autofocus = false,
+  });
 
-          return Padding(
-            padding: EdgeInsets.only(
-              right: index < movies.length - 1 ? _cardSpacing : 0,
-            ),
-            child: MoviePosterCard(
-              movie: movie,
-              width: _cardWidth,
-              autofocus: autofocusFirst && isFirst,
-              onSelect: () => _onMovieSelect(movie),
-              onLongPress: () => _onMovieFavoriteToggle(movie),
-            ),
-          );
-        },
-      ),
+  final VodMovie movie;
+  final VoidCallback onSelect;
+  final VoidCallback? onLongPress;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Use the full available width from the grid cell
+        return MoviePosterCard(
+          movie: movie,
+          width: constraints.maxWidth,
+          autofocus: autofocus,
+          onSelect: onSelect,
+          onLongPress: onLongPress,
+        );
+      },
     );
   }
 }
