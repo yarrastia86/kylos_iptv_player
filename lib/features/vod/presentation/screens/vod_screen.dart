@@ -1,24 +1,25 @@
 // Kylos IPTV Player - VOD Screen
-// Screen for browsing video-on-demand movies.
+// Screen for browsing video-on-demand movie categories.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:kylos_iptv_player/core/domain/watch_history/watch_history_providers.dart';
-import 'package:kylos_iptv_player/core/domain/watch_history/watch_progress.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/playlists/presentation/providers/playlist_providers.dart';
 import 'package:kylos_iptv_player/features/vod/domain/entities/vod_category.dart';
-import 'package:kylos_iptv_player/features/vod/domain/entities/vod_movie.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/providers/vod_providers.dart';
-import 'package:kylos_iptv_player/features/vod/presentation/widgets/vod_category_card.dart';
 import 'package:kylos_iptv_player/navigation/routes.dart';
 
-/// Video on Demand (Movies) screen.
+/// Video on Demand (Movies) categories screen.
 ///
-/// Displays available movies from the user's playlists organized
-/// by categories. Features a "Continue Watching" section at the top
-/// for quick access to recently viewed content.
+/// Simple full-width category grid following TV lean-back design principles:
+/// - Single purpose: Pick a category
+/// - Full-width layout maximizing readability
+/// - Large touch targets for 10-foot viewing
+/// - Clear focus states for D-pad navigation
+///
+/// Selecting a category navigates to the browsing view with movie posters.
 class VodScreen extends ConsumerStatefulWidget {
   const VodScreen({super.key});
 
@@ -27,12 +28,20 @@ class VodScreen extends ConsumerStatefulWidget {
 }
 
 class _VodScreenState extends ConsumerState<VodScreen> {
+  final FocusNode _screenFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(vodListNotifierProvider.notifier).loadCategories();
     });
+  }
+
+  @override
+  void dispose() {
+    _screenFocusNode.dispose();
+    super.dispose();
   }
 
   void _navigateToCategoryList(VodCategory category) {
@@ -51,60 +60,36 @@ class _VodScreenState extends ConsumerState<VodScreen> {
   }
 
   void _showOptionsMenu() {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: KylosColors.surfaceDark,
-        title: const Text(
+        title: Text(
           'Options',
-          style: TextStyle(color: KylosColors.textPrimary),
+          style: KylosTvTextStyles.sectionHeader,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading:
-                  const Icon(Icons.refresh, color: KylosColors.textSecondary),
-              title: const Text(
-                'Refresh',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.refresh,
+              label: 'Refresh',
               onTap: () {
                 Navigator.pop(context);
                 _handleRefresh();
               },
             ),
-            ListTile(
-              leading:
-                  const Icon(Icons.sort, color: KylosColors.textSecondary),
-              title: const Text(
-                'Sort',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement sorting
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.settings, color: KylosColors.textSecondary),
-              title: const Text(
-                'Settings',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.settings,
+              label: 'Settings',
               onTap: () {
                 Navigator.pop(context);
                 context.push(Routes.settings);
               },
             ),
-            ListTile(
-              leading:
-                  const Icon(Icons.logout, color: KylosColors.textSecondary),
-              title: const Text(
-                'Logout',
-                style: TextStyle(color: KylosColors.textPrimary),
-              ),
+            _OptionTile(
+              icon: Icons.logout,
+              label: 'Logout',
               onTap: () {
                 Navigator.pop(context);
                 _handleLogout();
@@ -125,13 +110,13 @@ class _VodScreenState extends ConsumerState<VodScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: KylosColors.surfaceDark,
-        title: const Text(
+        title: Text(
           'Logout',
-          style: TextStyle(color: KylosColors.textPrimary),
+          style: KylosTvTextStyles.sectionHeader,
         ),
-        content: const Text(
+        content: Text(
           'Are you sure you want to logout? This will clear your active playlist.',
-          style: TextStyle(color: KylosColors.textSecondary),
+          style: KylosTvTextStyles.body,
         ),
         actions: [
           TextButton(
@@ -159,36 +144,46 @@ class _VodScreenState extends ConsumerState<VodScreen> {
     context.go(Routes.dashboard);
   }
 
-  void _onContinueWatchingSelect(WatchProgress progress) {
-    // Navigate to movie details
-    context.push(Routes.movieDetailPath(progress.contentId));
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _handleBack();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   @override
   Widget build(BuildContext context) {
     final vodState = ref.watch(vodListNotifierProvider);
-    final continueWatchingAsync = ref.watch(continueWatchingProvider);
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              KylosColors.backgroundStart,
-              KylosColors.backgroundEnd,
-            ],
+    return Focus(
+      focusNode: _screenFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                KylosColors.backgroundStart,
+                KylosColors.backgroundEnd,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              Expanded(
-                child: _buildContent(vodState, continueWatchingAsync),
-              ),
-            ],
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: _buildContent(vodState),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -198,36 +193,31 @@ class _VodScreenState extends ConsumerState<VodScreen> {
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: KylosSpacing.m,
-        vertical: KylosSpacing.s,
+        horizontal: KylosSpacing.xl,
+        vertical: KylosSpacing.m,
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: KylosColors.textPrimary),
+          _FocusableIconButton(
+            icon: Icons.arrow_back,
             onPressed: _handleBack,
             tooltip: 'Back',
           ),
-          const Expanded(
-            child: Center(
-              child: Text(
-                'MOVIES',
-                style: TextStyle(
-                  color: KylosColors.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
+          const SizedBox(width: KylosSpacing.m),
+          Expanded(
+            child: Text(
+              'MOVIES',
+              style: KylosTvTextStyles.screenTitle,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.search, color: KylosColors.textSecondary),
+          _FocusableIconButton(
+            icon: Icons.search,
             onPressed: _handleSearch,
             tooltip: 'Search',
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: KylosColors.textSecondary),
+          const SizedBox(width: KylosSpacing.s),
+          _FocusableIconButton(
+            icon: Icons.more_vert,
             onPressed: _handleMore,
             tooltip: 'More options',
           ),
@@ -236,210 +226,129 @@ class _VodScreenState extends ConsumerState<VodScreen> {
     );
   }
 
-  Widget _buildContent(
-    VodListState state,
-    AsyncValue<List<WatchProgress>> continueWatchingAsync,
-  ) {
+  Widget _buildContent(VodListState state) {
     if (state.isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          color: KylosColors.moviesGlow,
+          color: KylosColors.tvAccent,
         ),
       );
     }
 
     if (state.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: KylosColors.textMuted,
-            ),
-            const SizedBox(height: KylosSpacing.m),
-            const Text(
-              'Failed to load categories',
-              style: TextStyle(
-                color: KylosColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: KylosSpacing.xs),
-            Text(
-              state.error!,
-              style: const TextStyle(
-                color: KylosColors.textMuted,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: KylosSpacing.l),
-            FilledButton.icon(
-              onPressed: () {
-                ref.read(vodListNotifierProvider.notifier).loadCategories();
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      return _buildErrorState(state.error!);
     }
 
     if (state.categories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(
-              Icons.movie_outlined,
-              size: 64,
-              color: KylosColors.textMuted,
-            ),
-            SizedBox(height: KylosSpacing.m),
-            Text(
-              'No movies available',
-              style: TextStyle(
-                color: KylosColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            SizedBox(height: KylosSpacing.xs),
-            Text(
-              'Add a playlist with VOD content',
-              style: TextStyle(
-                color: KylosColors.textMuted,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState();
     }
-
-    // Get continue watching movies only
-    final continueWatchingMovies = continueWatchingAsync.whenOrNull(
-      data: (items) => items
-          .where((item) => item.contentType == WatchContentType.movie)
-          .toList(),
-    );
 
     // Build categories with ALL and FAVOURITES at top
     final categories = _buildCategoriesWithSpecial(state);
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: KylosSpacing.l),
-      children: [
-        // Continue Watching Section
-        if (continueWatchingMovies != null && continueWatchingMovies.isNotEmpty)
-          _buildContinueWatchingSection(continueWatchingMovies),
+    return _buildCategoryGrid(categories);
+  }
 
-        // Categories Section Header
-        Padding(
-          padding: const EdgeInsets.only(
-            left: KylosSpacing.m,
-            top: KylosSpacing.m,
-            bottom: KylosSpacing.s,
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: KylosColors.textMuted,
           ),
-          child: Text(
-            'Categories',
-            style: const TextStyle(
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'Failed to load categories',
+            style: KylosTvTextStyles.sectionHeader.copyWith(
               color: KylosColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
             ),
           ),
-        ),
-
-        // Category Grid
-        _buildCategoryGrid(categories),
-      ],
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            error,
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: KylosSpacing.xl),
+          _FocusableButton(
+            icon: Icons.refresh,
+            label: 'Retry',
+            onPressed: () {
+              ref.read(vodListNotifierProvider.notifier).loadCategories();
+            },
+            autofocus: true,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildContinueWatchingSection(List<WatchProgress> items) {
-    // Convert WatchProgress to fake VodMovie for display
-    final movies = items
-        .map((progress) => VodMovie(
-              id: progress.contentId,
-              name: progress.title,
-              streamUrl: progress.streamUrl ?? '',
-              posterUrl: progress.posterUrl,
-            ))
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Section header
-        Padding(
-          padding: const EdgeInsets.only(
-            left: KylosSpacing.xxl,
-            right: KylosSpacing.m,
-            top: KylosSpacing.s,
-            bottom: KylosSpacing.s,
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.movie_outlined,
+            size: 64,
+            color: KylosColors.textMuted,
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.play_circle_outline,
-                color: KylosColors.moviesGlow,
-                size: 22,
-              ),
-              const SizedBox(width: KylosSpacing.xs),
-              const Text(
-                'Continue Watching',
-                style: TextStyle(
-                  color: KylosColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
+          const SizedBox(height: KylosSpacing.m),
+          Text(
+            'No movies available',
+            style: KylosTvTextStyles.sectionHeader.copyWith(
+              color: KylosColors.textPrimary,
+            ),
           ),
-        ),
-
-        // Horizontal movie row
-        SizedBox(
-          height: 225 + KylosSpacing.m, // Card height + padding
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: KylosSpacing.xxl),
-            itemCount: movies.length,
-            itemBuilder: (context, index) {
-              final movie = movies[index];
-              final progress = items[index];
-
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index < movies.length - 1 ? 16 : 0,
-                ),
-                child: _ContinueWatchingCard(
-                  movie: movie,
-                  progress: progress.progress,
-                  autofocus: index == 0,
-                  onSelect: () => _onContinueWatchingSelect(progress),
-                ),
-              );
-            },
+          const SizedBox(height: KylosSpacing.xs),
+          Text(
+            'Add a playlist with VOD content',
+            style: KylosTvTextStyles.body.copyWith(
+              color: KylosColors.textMuted,
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
 
-        const SizedBox(height: KylosSpacing.s),
-      ],
+  Widget _buildCategoryGrid(List<VodCategory> categories) {
+    // Use consistent horizontal padding matching the top bar (KylosSpacing.xl = 32)
+    // Apply padding directly to GridView for proper alignment
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(
+        horizontal: KylosSpacing.xl,
+        vertical: KylosSpacing.m,
+      ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        // Consistent spacing between items
+        mainAxisSpacing: KylosSpacing.m,
+        crossAxisSpacing: KylosSpacing.m,
+        // Aspect ratio for readable tiles at 10-foot distance
+        childAspectRatio: 2.8,
+      ),
+      itemCount: categories.length,
+      itemBuilder: (context, index) {
+        final category = categories[index];
+        return _CategoryTile(
+          category: category,
+          autofocus: index == 0,
+          onSelect: () => _navigateToCategoryList(category),
+        );
+      },
     );
   }
 
   List<VodCategory> _buildCategoriesWithSpecial(VodListState state) {
     final allCategory = VodCategory(
       id: 'all',
-      name: 'ALL',
+      name: 'ALL MOVIES',
       movieCount: state.allMoviesCount,
       sortOrder: -2,
     );
@@ -454,123 +363,88 @@ class _VodScreenState extends ConsumerState<VodScreen> {
 
     return [allCategory, favoritesCategory, ...state.categories];
   }
-
-  Widget _buildCategoryGrid(List<VodCategory> categories) {
-    final rowCount = (categories.length / 2).ceil();
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      itemCount: rowCount,
-      itemBuilder: (context, rowIndex) {
-        final leftIndex = rowIndex * 2;
-        final rightIndex = leftIndex + 1;
-        final hasRight = rightIndex < categories.length;
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: VodCategoryCard(
-                  category: categories[leftIndex],
-                  onTap: () => _navigateToCategoryList(categories[leftIndex]),
-                  autofocus: false, // Don't autofocus category cards
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: hasRight
-                    ? VodCategoryCard(
-                        category: categories[rightIndex],
-                        onTap: () =>
-                            _navigateToCategoryList(categories[rightIndex]),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
-/// A continue watching card with progress indicator.
-class _ContinueWatchingCard extends StatefulWidget {
-  const _ContinueWatchingCard({
-    required this.movie,
-    required this.progress,
+/// Category tile widget for the grid.
+///
+/// Large, TV-optimized tile with:
+/// - Minimum 22px font for 10-foot readability
+/// - Clear focus states with glow effect
+/// - Icon + text layout for quick recognition
+class _CategoryTile extends StatefulWidget {
+  const _CategoryTile({
+    required this.category,
+    required this.onSelect,
     this.autofocus = false,
-    this.onSelect,
   });
 
-  final VodMovie movie;
-  final double progress;
+  final VodCategory category;
+  final VoidCallback onSelect;
   final bool autofocus;
-  final VoidCallback? onSelect;
 
   @override
-  State<_ContinueWatchingCard> createState() => _ContinueWatchingCardState();
+  State<_CategoryTile> createState() => _CategoryTileState();
 }
 
-class _ContinueWatchingCardState extends State<_ContinueWatchingCard>
+class _CategoryTileState extends State<_CategoryTile>
     with SingleTickerProviderStateMixin {
-  late FocusNode _focusNode;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
   bool _isFocused = false;
 
-  static const _cardWidth = 150.0;
-
   @override
   void initState() {
     super.initState();
-    _focusNode = FocusNode();
-    _focusNode.addListener(_handleFocusChange);
-
     _animationController = AnimationController(
       duration: KylosDurations.fast,
       vsync: this,
     );
-
     _scaleAnimation = Tween<double>(
       begin: 1.0,
-      end: 1.08,
+      end: 1.05,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: Curves.easeOutCubic,
     ));
   }
 
   @override
   void dispose() {
-    _focusNode.removeListener(_handleFocusChange);
-    _focusNode.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
-  void _handleFocusChange() {
-    final hasFocus = _focusNode.hasFocus;
-    if (hasFocus != _isFocused) {
-      setState(() => _isFocused = hasFocus);
-      if (hasFocus) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onSelect();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _onFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final height = _cardWidth * 1.5;
+    final isSpecial =
+        widget.category.id == 'all' || widget.category.id == 'favorites';
 
     return Focus(
-      focusNode: _focusNode,
       autofocus: widget.autofocus,
+      onFocusChange: _onFocusChange,
+      onKeyEvent: _handleKeyEvent,
       child: GestureDetector(
         onTap: widget.onSelect,
         child: AnimatedBuilder(
@@ -580,111 +454,122 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard>
               scale: _scaleAnimation.value,
               child: AnimatedContainer(
                 duration: KylosDurations.fast,
-                width: _cardWidth,
-                height: height,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: KylosSpacing.l,
+                  vertical: KylosSpacing.m,
+                ),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(KylosRadius.m),
-                  border: _isFocused
-                      ? Border.all(
-                          color: KylosColors.moviesGlow,
-                          width: 3,
+                  gradient: _isFocused
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            KylosColors.tvAccent.withOpacity(0.4),
+                            KylosColors.tvAccent.withOpacity(0.15),
+                          ],
                         )
-                      : null,
+                      : isSpecial
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: widget.category.id == 'favorites'
+                                  ? [
+                                      Colors.red.shade900.withOpacity(0.4),
+                                      Colors.red.shade900.withOpacity(0.2),
+                                    ]
+                                  : [
+                                      KylosColors.surfaceLight,
+                                      KylosColors.surfaceDark,
+                                    ],
+                            )
+                          : null,
+                  color: _isFocused || isSpecial ? null : KylosColors.surfaceDark,
+                  borderRadius: BorderRadius.circular(KylosRadius.l),
+                  border: _isFocused
+                      ? Border.all(color: KylosColors.tvAccent, width: 3)
+                      : Border.all(
+                          color: KylosColors.buttonBorder,
+                          width: 1,
+                        ),
                   boxShadow: _isFocused
                       ? [
                           BoxShadow(
-                            color: KylosColors.moviesGlow.withOpacity(0.4),
-                            blurRadius: 16,
-                            spreadRadius: 2,
+                            color: KylosColors.tvAccent.withOpacity(0.4),
+                            blurRadius: 20,
+                            spreadRadius: 4,
                           ),
                         ]
                       : null,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(
-                    _isFocused ? KylosRadius.m - 3 : KylosRadius.m,
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Poster image
-                      _buildPoster(),
-
-                      // Bottom gradient
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        height: height * 0.5,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                KylosColors.backgroundStart.withOpacity(0.7),
-                                KylosColors.backgroundStart.withOpacity(0.95),
-                              ],
-                              stops: const [0.0, 0.5, 1.0],
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      padding: const EdgeInsets.all(KylosSpacing.s),
+                      decoration: BoxDecoration(
+                        color: _isFocused
+                            ? KylosColors.tvAccent.withOpacity(0.3)
+                            : KylosColors.surfaceOverlay,
+                        borderRadius: BorderRadius.circular(KylosRadius.m),
+                      ),
+                      child: Icon(
+                        widget.category.id == 'favorites'
+                            ? Icons.favorite
+                            : widget.category.id == 'all'
+                                ? Icons.movie_filter
+                                : Icons.folder_outlined,
+                        color: _isFocused
+                            ? KylosColors.tvAccent
+                            : widget.category.id == 'favorites'
+                                ? Colors.redAccent.shade200
+                                : KylosColors.textSecondary,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: KylosSpacing.m),
+                    // Name and count
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.category.name,
+                            style: KylosTvTextStyles.cardTitle.copyWith(
+                              color: _isFocused
+                                  ? KylosColors.tvAccent
+                                  : KylosColors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
+                          if (widget.category.movieCount > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_formatCount(widget.category.movieCount)} movies',
+                              style: KylosTvTextStyles.cardSubtitle.copyWith(
+                                color: _isFocused
+                                    ? KylosColors.tvAccent.withOpacity(0.8)
+                                    : KylosColors.textMuted,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-
-                      // Progress bar
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: LinearProgressIndicator(
-                          value: widget.progress,
-                          backgroundColor: Colors.black45,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            KylosColors.moviesGlow,
-                          ),
-                          minHeight: 4,
-                        ),
-                      ),
-
-                      // Title
-                      Positioned(
-                        left: 8,
-                        right: 8,
-                        bottom: 12,
-                        child: Text(
-                          widget.movie.name,
-                          style: TextStyle(
-                            color: _isFocused
-                                ? KylosColors.moviesGlow
-                                : KylosColors.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-
-                      // Play icon overlay
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _isFocused
-                                ? KylosColors.moviesGlow.withOpacity(0.9)
-                                : Colors.white.withOpacity(0.8),
-                          ),
-                          child: Icon(
-                            Icons.play_arrow,
-                            color: _isFocused ? Colors.white : Colors.black87,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    // Arrow
+                    Icon(
+                      Icons.chevron_right,
+                      color: _isFocused
+                          ? KylosColors.tvAccent
+                          : KylosColors.textMuted,
+                      size: 28,
+                    ),
+                  ],
                 ),
               ),
             );
@@ -694,26 +579,179 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard>
     );
   }
 
-  Widget _buildPoster() {
-    final posterUrl = widget.movie.posterUrl;
-    if (posterUrl != null && posterUrl.isNotEmpty) {
-      return Image.network(
-        posterUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPlaceholder(),
-      );
+  String _formatCount(int count) {
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
     }
-    return _buildPlaceholder();
+    return count.toString();
+  }
+}
+
+/// Option tile for the options menu.
+class _OptionTile extends StatelessWidget {
+  const _OptionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: KylosColors.textSecondary),
+      title: Text(
+        label,
+        style: KylosTvTextStyles.body.copyWith(
+          color: KylosColors.textPrimary,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+/// A focusable icon button for the top bar.
+class _FocusableIconButton extends StatefulWidget {
+  const _FocusableIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  State<_FocusableIconButton> createState() => _FocusableIconButtonState();
+}
+
+class _FocusableIconButtonState extends State<_FocusableIconButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
-  Widget _buildPlaceholder() {
-    return Container(
-      color: KylosColors.surfaceDark,
-      child: Center(
-        child: Icon(
-          Icons.movie,
-          size: _cardWidth * 0.3,
-          color: KylosColors.textMuted,
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Tooltip(
+          message: widget.tooltip ?? '',
+          child: AnimatedContainer(
+            duration: KylosDurations.fast,
+            padding: const EdgeInsets.all(KylosSpacing.s),
+            decoration: BoxDecoration(
+              color: _isFocused
+                  ? KylosColors.tvAccent.withOpacity(0.2)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(KylosRadius.s),
+              border: _isFocused
+                  ? Border.all(color: KylosColors.tvAccent, width: 2)
+                  : null,
+            ),
+            child: Icon(
+              widget.icon,
+              color:
+                  _isFocused ? KylosColors.tvAccent : KylosColors.textSecondary,
+              size: 28,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A focusable button for actions.
+class _FocusableButton extends StatefulWidget {
+  const _FocusableButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.autofocus = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool autofocus;
+
+  @override
+  State<_FocusableButton> createState() => _FocusableButtonState();
+}
+
+class _FocusableButtonState extends State<_FocusableButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: KylosDurations.fast,
+          padding: const EdgeInsets.symmetric(
+            horizontal: KylosSpacing.l,
+            vertical: KylosSpacing.m,
+          ),
+          decoration: BoxDecoration(
+            color: _isFocused ? KylosColors.tvAccent : KylosColors.surfaceLight,
+            borderRadius: BorderRadius.circular(KylosRadius.m),
+            border: _isFocused
+                ? Border.all(color: KylosColors.tvAccent, width: 2)
+                : Border.all(color: KylosColors.buttonBorder, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                color: _isFocused ? Colors.white : KylosColors.textSecondary,
+                size: 22,
+              ),
+              const SizedBox(width: KylosSpacing.s),
+              Text(
+                widget.label,
+                style: KylosTvTextStyles.button.copyWith(
+                  color: _isFocused ? Colors.white : KylosColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

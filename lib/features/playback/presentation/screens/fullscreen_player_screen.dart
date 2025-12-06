@@ -62,6 +62,8 @@ class _FullscreenPlayerScreenState
   }
 
   void _handleBack() {
+    // Stop playback before navigating away
+    ref.read(playbackNotifierProvider.notifier).stop();
     // Restore brightness before navigating away
     ref.read(playerSettingsProvider.notifier).restoreBrightness();
     context.pop();

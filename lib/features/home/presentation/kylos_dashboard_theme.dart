@@ -51,6 +51,10 @@ abstract class KylosColors {
   static const Color moviesGlow = Color(0xFFFF6B6B);
   static const Color seriesGlow = Color(0xFF667EEA);
 
+  // TV-friendly accent (softer than saturated red/yellow)
+  static const Color tvAccent = Color(0xFF7C9FFF); // Soft blue-purple
+  static const Color tvAccentAlt = Color(0xFF00D4AA); // Cyan-teal
+
   // Button colors
   static const Color buttonBackground = Color(0x1AFFFFFF); // 10% white
   static const Color buttonBorder = Color(0x33FFFFFF); // 20% white
@@ -128,6 +132,79 @@ abstract class KylosTextStyles {
     color: KylosColors.textCaption,
     fontSize: 12,
     fontWeight: FontWeight.w400,
+  );
+}
+
+/// TV-optimized text styles (10-foot experience).
+/// Minimum 22px for body text, increased letter/line spacing.
+abstract class KylosTvTextStyles {
+  // Screen title (large header)
+  static const TextStyle screenTitle = TextStyle(
+    color: KylosColors.textPrimary,
+    fontSize: 28,
+    fontWeight: FontWeight.bold,
+    letterSpacing: 2.5,
+    height: 1.3,
+  );
+
+  // Section header (category row titles)
+  static const TextStyle sectionHeader = TextStyle(
+    color: KylosColors.textPrimary,
+    fontSize: 24,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.5,
+    height: 1.3,
+  );
+
+  // Card title (movie/show names)
+  static const TextStyle cardTitle = TextStyle(
+    color: KylosColors.textPrimary,
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.5,
+    height: 1.2,
+  );
+
+  // Card subtitle (year, rating)
+  static const TextStyle cardSubtitle = TextStyle(
+    color: KylosColors.textSecondary,
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0.5,
+    height: 1.3,
+  );
+
+  // Body text (descriptions, plots)
+  static const TextStyle body = TextStyle(
+    color: KylosColors.textSecondary,
+    fontSize: 18,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0.3,
+    height: 1.5,
+  );
+
+  // Button label
+  static const TextStyle button = TextStyle(
+    color: KylosColors.textPrimary,
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1,
+  );
+
+  // Badge text (HD, 4K, rating)
+  static const TextStyle badge = TextStyle(
+    color: KylosColors.textPrimary,
+    fontSize: 12,
+    fontWeight: FontWeight.bold,
+    letterSpacing: 0.5,
+  );
+
+  // Metadata (duration, genre chips)
+  static const TextStyle metadata = TextStyle(
+    color: KylosColors.textMuted,
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.5,
   );
 }
 

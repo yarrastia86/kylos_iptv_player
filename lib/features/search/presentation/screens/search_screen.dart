@@ -1,11 +1,16 @@
 // Kylos IPTV Player - Search Screen
-// Screen for searching content across the app (movies and series).
+// Screen for searching content across the app (movies, series, and live TV).
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kylos_iptv_player/core/domain/playback/playback_providers.dart';
+import 'package:kylos_iptv_player/core/domain/playback/playback_state.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
+import 'package:kylos_iptv_player/features/live_tv/domain/entities/channel.dart';
+import 'package:kylos_iptv_player/features/live_tv/presentation/providers/channel_providers.dart';
 import 'package:kylos_iptv_player/features/series/domain/entities/series.dart';
 import 'package:kylos_iptv_player/features/series/presentation/providers/series_providers.dart';
 import 'package:kylos_iptv_player/features/vod/domain/entities/vod_movie.dart';
@@ -13,7 +18,7 @@ import 'package:kylos_iptv_player/features/vod/presentation/providers/vod_provid
 import 'package:kylos_iptv_player/navigation/routes.dart';
 
 /// Tab selection for search results.
-enum SearchTab { movies, series }
+enum SearchTab { liveTV, movies, series }
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -25,13 +30,14 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen>
     with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
+  final _screenFocusNode = FocusNode();
   late TabController _tabController;
-  SearchTab _selectedTab = SearchTab.movies;
+  SearchTab _selectedTab = SearchTab.liveTV;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() {
@@ -45,45 +51,85 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void dispose() {
     _searchController.dispose();
     _tabController.dispose();
+    _screenFocusNode.dispose();
     super.dispose();
+  }
+
+  void _handleBack() {
+    context.pop();
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _handleBack();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _playChannel(Channel channel) {
+    // Create playable content
+    final content = PlayableContent(
+      id: channel.id,
+      title: channel.name,
+      streamUrl: channel.streamUrl,
+      type: ContentType.liveChannel,
+      logoUrl: channel.logoUrl,
+      categoryName: channel.categoryName,
+    );
+
+    // Start playback
+    ref.read(playbackNotifierProvider.notifier).play(content);
+
+    // Navigate to player
+    context.push(Routes.player);
   }
 
   @override
   Widget build(BuildContext context) {
     final query = _searchController.text;
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              KylosColors.backgroundStart,
-              KylosColors.backgroundEnd,
-            ],
+    return Focus(
+      focusNode: _screenFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                KylosColors.backgroundStart,
+                KylosColors.backgroundEnd,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Search header
-              _buildSearchHeader(),
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Search header
+                _buildSearchHeader(),
 
-              // Tab bar
-              _buildTabBar(),
+                // Tab bar
+                _buildTabBar(),
 
-              // Results
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildMovieResults(query),
-                    _buildSeriesResults(query),
-                  ],
+                // Results
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildLiveTvResults(query),
+                      _buildMovieResults(query),
+                      _buildSeriesResults(query),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -95,10 +141,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       padding: const EdgeInsets.all(KylosSpacing.m),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: KylosColors.textPrimary),
-            onPressed: () => context.pop(),
+          _FocusableIconButton(
+            icon: Icons.arrow_back,
+            onPressed: _handleBack,
+            tooltip: 'Back',
           ),
+          const SizedBox(width: KylosSpacing.m),
           Expanded(
             child: TextField(
               controller: _searchController,
@@ -107,7 +155,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 setState(() {});
               },
               decoration: InputDecoration(
-                hintText: 'Search movies and series...',
+                hintText: 'Search movies, series, and channels...',
                 hintStyle: const TextStyle(color: KylosColors.textMuted),
                 prefixIcon:
                     const Icon(Icons.search, color: KylosColors.textMuted),
@@ -130,7 +178,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              style: const TextStyle(color: KylosColors.textPrimary),
+              style: KylosTvTextStyles.body.copyWith(
+                color: KylosColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -149,13 +199,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         controller: _tabController,
         indicator: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          color: KylosColors.moviesGlow.withOpacity(0.2),
+          color: KylosColors.tvAccent.withOpacity(0.2),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: KylosColors.moviesGlow,
+        labelColor: KylosColors.tvAccent,
         unselectedLabelColor: KylosColors.textSecondary,
         dividerColor: Colors.transparent,
+        labelStyle: KylosTvTextStyles.badge,
         tabs: const [
+          Tab(
+            icon: Icon(Icons.live_tv, size: 20),
+            text: 'Live TV',
+          ),
           Tab(
             icon: Icon(Icons.movie, size: 20),
             text: 'Movies',
@@ -178,12 +233,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
     return moviesAsync.when(
       loading: () => const Center(
-        child: CircularProgressIndicator(color: KylosColors.moviesGlow),
+        child: CircularProgressIndicator(color: KylosColors.tvAccent),
       ),
       error: (err, stack) => Center(
         child: Text(
-          'Error: $err',
-          style: const TextStyle(color: KylosColors.textMuted),
+          'Error searching movies',
+          style: KylosTvTextStyles.body.copyWith(color: KylosColors.textMuted),
         ),
       ),
       data: (movies) {
@@ -204,12 +259,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
     return seriesAsync.when(
       loading: () => const Center(
-        child: CircularProgressIndicator(color: KylosColors.seriesGlow),
+        child: CircularProgressIndicator(color: KylosColors.tvAccent),
       ),
       error: (err, stack) => Center(
         child: Text(
-          'Error: $err',
-          style: const TextStyle(color: KylosColors.textMuted),
+          'Error searching series',
+          style: KylosTvTextStyles.body.copyWith(color: KylosColors.textMuted),
         ),
       ),
       data: (series) {
@@ -221,22 +276,51 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
+  Widget _buildLiveTvResults(String query) {
+    if (query.length < 2) {
+      return _buildEmptyState('Enter at least 2 characters to search channels');
+    }
+
+    final channelsAsync = ref.watch(channelSearchProvider(query));
+
+    return channelsAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: KylosColors.tvAccent),
+      ),
+      error: (err, stack) => Center(
+        child: Text(
+          'Error searching channels',
+          style: KylosTvTextStyles.body.copyWith(color: KylosColors.textMuted),
+        ),
+      ),
+      data: (channels) {
+        if (channels.isEmpty) {
+          return _buildEmptyState('No channels found for "$query"');
+        }
+        return _buildChannelList(channels);
+      },
+    );
+  }
+
   Widget _buildEmptyState(String message) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _selectedTab == SearchTab.movies ? Icons.movie : Icons.tv,
+            _selectedTab == SearchTab.liveTV
+                ? Icons.live_tv
+                : _selectedTab == SearchTab.movies
+                    ? Icons.movie
+                    : Icons.tv,
             size: 64,
             color: KylosColors.textMuted,
           ),
           const SizedBox(height: KylosSpacing.m),
           Text(
             message,
-            style: const TextStyle(
+            style: KylosTvTextStyles.body.copyWith(
               color: KylosColors.textMuted,
-              fontSize: 14,
             ),
             textAlign: TextAlign.center,
           ),
@@ -282,9 +366,94 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       },
     );
   }
+
+  Widget _buildChannelList(List<Channel> channels) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(KylosSpacing.m),
+      itemCount: channels.length,
+      itemBuilder: (context, index) {
+        final channel = channels[index];
+        return _SearchResultCard(
+          title: channel.name,
+          subtitle: channel.categoryName,
+          imageUrl: channel.logoUrl,
+          icon: Icons.live_tv,
+          glowColor: KylosColors.liveTvGlow,
+          isLive: true,
+          onTap: () => _playChannel(channel),
+        );
+      },
+    );
+  }
 }
 
-class _SearchResultCard extends StatelessWidget {
+/// Focusable icon button.
+class _FocusableIconButton extends StatefulWidget {
+  const _FocusableIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  State<_FocusableIconButton> createState() => _FocusableIconButtonState();
+}
+
+class _FocusableIconButtonState extends State<_FocusableIconButton> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Tooltip(
+          message: widget.tooltip ?? '',
+          child: AnimatedContainer(
+            duration: KylosDurations.fast,
+            padding: const EdgeInsets.all(KylosSpacing.s),
+            decoration: BoxDecoration(
+              color: _isFocused
+                  ? KylosColors.tvAccent.withOpacity(0.2)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(KylosRadius.s),
+              border: _isFocused
+                  ? Border.all(color: KylosColors.tvAccent, width: 2)
+                  : null,
+            ),
+            child: Icon(
+              widget.icon,
+              color:
+                  _isFocused ? KylosColors.tvAccent : KylosColors.textSecondary,
+              size: 28,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchResultCard extends StatefulWidget {
   const _SearchResultCard({
     required this.title,
     this.subtitle,
@@ -293,6 +462,7 @@ class _SearchResultCard extends StatelessWidget {
     required this.icon,
     required this.glowColor,
     required this.onTap,
+    this.isLive = false,
   });
 
   final String title;
@@ -302,25 +472,64 @@ class _SearchResultCard extends StatelessWidget {
   final IconData icon;
   final Color glowColor;
   final VoidCallback onTap;
+  final bool isLive;
+
+  @override
+  State<_SearchResultCard> createState() => _SearchResultCardState();
+}
+
+class _SearchResultCardState extends State<_SearchResultCard> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onTap();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: KylosColors.surfaceDark.withOpacity(0.5),
-      margin: const EdgeInsets.only(bottom: KylosSpacing.s),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
+    return Focus(
+      onFocusChange: (hasFocus) => setState(() => _isFocused = hasFocus),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: KylosDurations.fast,
+          margin: const EdgeInsets.only(bottom: KylosSpacing.s),
           padding: const EdgeInsets.all(KylosSpacing.s),
+          decoration: BoxDecoration(
+            color: _isFocused
+                ? widget.glowColor.withOpacity(0.15)
+                : KylosColors.surfaceDark.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(KylosRadius.m),
+            border: _isFocused
+                ? Border.all(color: widget.glowColor, width: 2)
+                : null,
+            boxShadow: _isFocused
+                ? [
+                    BoxShadow(
+                      color: widget.glowColor.withOpacity(0.3),
+                      blurRadius: 12,
+                    ),
+                  ]
+                : null,
+          ),
           child: Row(
             children: [
               // Image
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: SizedBox(
-                  width: 60,
-                  height: 80,
+                  width: 70,
+                  height: 90,
                   child: _buildImage(),
                 ),
               ),
@@ -331,29 +540,55 @@ class _SearchResultCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: KylosColors.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    // Title row with live badge
+                    Row(
+                      children: [
+                        if (widget.isLive)
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'LIVE',
+                              style: KylosTvTextStyles.badge.copyWith(
+                                fontSize: 10,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        Expanded(
+                          child: Text(
+                            widget.title,
+                            style: KylosTvTextStyles.cardTitle.copyWith(
+                              color: _isFocused
+                                  ? widget.glowColor
+                                  : KylosColors.textPrimary,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    if (subtitle != null && subtitle!.isNotEmpty) ...[
+                    if (widget.subtitle != null &&
+                        widget.subtitle!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        subtitle!,
-                        style: const TextStyle(
+                        widget.subtitle!,
+                        style: KylosTvTextStyles.metadata.copyWith(
                           color: KylosColors.textSecondary,
-                          fontSize: 12,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                    if (rating != null && rating!.isNotEmpty) ...[
+                    if (widget.rating != null && widget.rating!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -364,10 +599,9 @@ class _SearchResultCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            rating!,
-                            style: const TextStyle(
+                            widget.rating!,
+                            style: KylosTvTextStyles.badge.copyWith(
                               color: Colors.amber,
-                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -377,10 +611,11 @@ class _SearchResultCard extends StatelessWidget {
                 ),
               ),
 
-              // Arrow
+              // Arrow or play icon
               Icon(
-                Icons.chevron_right,
-                color: glowColor,
+                widget.isLive ? Icons.play_circle_filled : Icons.chevron_right,
+                color: _isFocused ? widget.glowColor : KylosColors.textMuted,
+                size: widget.isLive ? 32 : 24,
               ),
             ],
           ),
@@ -390,9 +625,9 @@ class _SearchResultCard extends StatelessWidget {
   }
 
   Widget _buildImage() {
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
+    if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty) {
       return CachedNetworkImage(
-        imageUrl: imageUrl!,
+        imageUrl: widget.imageUrl!,
         fit: BoxFit.cover,
         errorWidget: (_, __, ___) => _buildPlaceholder(),
         placeholder: (_, __) => _buildPlaceholder(),
@@ -406,9 +641,9 @@ class _SearchResultCard extends StatelessWidget {
       color: KylosColors.surfaceDark,
       child: Center(
         child: Icon(
-          icon,
+          widget.icon,
           color: KylosColors.textMuted,
-          size: 24,
+          size: 28,
         ),
       ),
     );

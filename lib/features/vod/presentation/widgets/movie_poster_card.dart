@@ -15,7 +15,7 @@ class MoviePosterCard extends StatefulWidget {
   const MoviePosterCard({
     super.key,
     required this.movie,
-    this.width = 150,
+    this.width = 180,
     this.isPlaying = false,
     this.autofocus = false,
     this.onSelect,
@@ -74,10 +74,10 @@ class _MoviePosterCardState extends State<MoviePosterCard>
 
     _scaleAnimation = Tween<double>(
       begin: 1.0,
-      end: 1.08,
+      end: 1.1, // Slightly larger scale for TV visibility
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: Curves.easeOutCubic,
     ));
   }
 
@@ -148,6 +148,26 @@ class _MoviePosterCardState extends State<MoviePosterCard>
     return date;
   }
 
+  /// Determine format badge (HD, 4K, SD) from container extension or name
+  String? get _formatBadge {
+    final ext = widget.movie.containerExtension?.toLowerCase();
+    final name = widget.movie.name.toLowerCase();
+
+    if (name.contains('4k') || name.contains('2160p') || name.contains('uhd')) {
+      return '4K';
+    }
+    if (name.contains('1080p') || name.contains('fhd')) {
+      return 'HD';
+    }
+    if (name.contains('720p')) {
+      return 'HD';
+    }
+    if (ext == 'mkv' || ext == 'mp4') {
+      return 'HD'; // Assume HD for common formats
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final height = widget.width * 1.5; // 2:3 aspect ratio
@@ -172,28 +192,28 @@ class _MoviePosterCardState extends State<MoviePosterCard>
                   borderRadius: BorderRadius.circular(KylosRadius.m),
                   border: _isFocused
                       ? Border.all(
-                          color: KylosColors.moviesGlow,
-                          width: 3,
+                          color: KylosColors.tvAccent,
+                          width: 4,
                         )
                       : widget.isPlaying
                           ? Border.all(
-                              color: KylosColors.moviesGlow.withOpacity(0.6),
-                              width: 2,
+                              color: KylosColors.tvAccentAlt.withOpacity(0.7),
+                              width: 3,
                             )
                           : null,
                   boxShadow: _isFocused
                       ? [
                           BoxShadow(
-                            color: KylosColors.moviesGlow.withOpacity(0.4),
-                            blurRadius: 16,
-                            spreadRadius: 2,
+                            color: KylosColors.tvAccent.withOpacity(0.5),
+                            blurRadius: 24,
+                            spreadRadius: 4,
                           ),
                         ]
                       : null,
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(
-                    _isFocused ? KylosRadius.m - 3 : KylosRadius.m,
+                    _isFocused ? KylosRadius.m - 4 : KylosRadius.m,
                   ),
                   child: Stack(
                     fit: StackFit.expand,
@@ -201,12 +221,12 @@ class _MoviePosterCardState extends State<MoviePosterCard>
                       // Poster image
                       _buildPoster(),
 
-                      // Bottom gradient overlay
+                      // Bottom gradient overlay for text
                       Positioned(
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        height: height * 0.5,
+                        height: height * 0.4,
                         child: Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -214,135 +234,131 @@ class _MoviePosterCardState extends State<MoviePosterCard>
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                KylosColors.backgroundStart.withOpacity(0.7),
-                                KylosColors.backgroundStart.withOpacity(0.95),
+                                KylosColors.backgroundStart.withOpacity(0.8),
+                                KylosColors.backgroundStart,
                               ],
-                              stops: const [0.0, 0.5, 1.0],
+                              stops: const [0.0, 0.6, 1.0],
                             ),
                           ),
                         ),
                       ),
 
-                      // Title and year at bottom
+                      // Title at bottom
                       Positioned(
-                        left: 8,
-                        right: 8,
-                        bottom: 8,
+                        left: 12,
+                        right: 12,
+                        bottom: 12,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               widget.movie.name,
-                              style: TextStyle(
+                              style: KylosTvTextStyles.cardTitle.copyWith(
                                 color: _isFocused
-                                    ? KylosColors.moviesGlow
+                                    ? KylosColors.tvAccent
                                     : KylosColors.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                height: 1.2,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             if (_year != null) ...[
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 4),
                               Text(
                                 _year!,
-                                style: TextStyle(
-                                  color: KylosColors.textMuted,
-                                  fontSize: 11,
-                                ),
+                                style: KylosTvTextStyles.cardSubtitle,
                               ),
                             ],
                           ],
                         ),
                       ),
 
-                      // Favorite heart icon (top-left)
-                      if (widget.movie.isFavorite)
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Icon(
-                              Icons.favorite,
-                              color: Colors.red,
-                              size: 14,
-                            ),
-                          ),
-                        ),
+                      // Top badges row
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        right: 10,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Favorite badge
+                            if (widget.movie.isFavorite)
+                              _Badge(
+                                child: const Icon(
+                                  Icons.favorite,
+                                  color: Colors.redAccent,
+                                  size: 14,
+                                ),
+                              ),
 
-                      // Rating badge (top-right)
-                      if (widget.movie.rating != null &&
-                          widget.movie.rating!.isNotEmpty)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
+                            // Spacer when no favorite
+                            if (!widget.movie.isFavorite)
+                              const SizedBox.shrink(),
+
+                            // Right side badges
+                            Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
-                                  Icons.star,
-                                  color: Colors.amber,
-                                  size: 12,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  widget.movie.rating!,
-                                  style: const TextStyle(
-                                    color: KylosColors.textPrimary,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
+                                // Format badge (HD, 4K)
+                                if (_formatBadge != null) ...[
+                                  _Badge(
+                                    color: _formatBadge == '4K'
+                                        ? Colors.amber.shade700
+                                        : KylosColors.surfaceLight,
+                                    child: Text(
+                                      _formatBadge!,
+                                      style: KylosTvTextStyles.badge,
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 6),
+                                ],
+                                // Rating badge
+                                if (widget.movie.rating != null &&
+                                    widget.movie.rating!.isNotEmpty)
+                                  _Badge(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.star_rounded,
+                                          color: Colors.amber,
+                                          size: 14,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          widget.movie.rating!,
+                                          style: KylosTvTextStyles.badge,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
-                          ),
+                          ],
                         ),
+                      ),
 
                       // Playing indicator
                       if (widget.isPlaying)
                         Positioned(
-                          top: 8,
-                          left: widget.movie.isFavorite ? 34 : 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: KylosColors.moviesGlow,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                          top: 10,
+                          left: widget.movie.isFavorite ? 40 : 10,
+                          child: _Badge(
+                            color: KylosColors.tvAccentAlt,
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.play_arrow,
+                                  Icons.play_arrow_rounded,
                                   color: Colors.white,
-                                  size: 10,
+                                  size: 12,
                                 ),
                                 SizedBox(width: 2),
                                 Text(
-                                  'PLAYING',
+                                  'NOW',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 8,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -379,11 +395,34 @@ class _MoviePosterCardState extends State<MoviePosterCard>
       color: KylosColors.surfaceDark,
       child: Center(
         child: Icon(
-          Icons.movie,
-          size: widget.width * 0.3,
+          Icons.movie_outlined,
+          size: widget.width * 0.25,
           color: KylosColors.textMuted,
         ),
       ),
+    );
+  }
+}
+
+/// Small badge widget for overlays.
+class _Badge extends StatelessWidget {
+  const _Badge({
+    required this.child,
+    this.color,
+  });
+
+  final Widget child;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color ?? Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: child,
     );
   }
 }
