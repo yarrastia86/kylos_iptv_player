@@ -156,6 +156,8 @@ class UpgradePromptDialog extends ConsumerWidget {
                                     color: KylosColors.textPrimary,
                                     fontSize: 13,
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],

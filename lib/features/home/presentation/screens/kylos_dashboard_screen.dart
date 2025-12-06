@@ -1,11 +1,13 @@
 // Kylos IPTV Player - Dashboard Screen
 // Main home dashboard for navigating IPTV features.
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:kylos_iptv_player/core/devices/device_providers.dart';
 import 'package:kylos_iptv_player/features/ads/presentation/widgets/interstitial_ad_mixin.dart';
 import 'package:kylos_iptv_player/features/home/presentation/kylos_dashboard_theme.dart';
 import 'package:kylos_iptv_player/features/home/presentation/widgets/dashboard_top_bar.dart';
@@ -78,6 +80,11 @@ class _KylosDashboardScreenState extends ConsumerState<KylosDashboardScreen>
     context.push(Routes.settings);
   }
 
+  void _navigateToProfile() {
+    // Navigate to device management screen which shows account info
+    context.push(Routes.deviceManagement);
+  }
+
   void _handleExit() {
     showDialog<void>(
       context: context,
@@ -112,6 +119,15 @@ class _KylosDashboardScreenState extends ConsumerState<KylosDashboardScreen>
   Widget build(BuildContext context) {
     final activePlaylist = ref.watch(activePlaylistProvider);
     final expirationDate = ref.watch(xtreamExpirationDateProvider);
+
+    // Watch registered devices count (not active streams)
+    final deviceCount = ref.watch(deviceCountProvider);
+    final maxDevices = ref.watch(maxRegisteredDevicesProvider);
+
+    // Get current user info
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final userName = currentUser?.displayName;
+    final userPhotoUrl = currentUser?.photoURL;
 
     // Get expiration date from Xtream auth info
     String? expirationText;
@@ -155,6 +171,11 @@ class _KylosDashboardScreenState extends ConsumerState<KylosDashboardScreen>
                         final isCompact = constraints.maxWidth < 600;
                         return DashboardTopBar(
                           compact: isCompact,
+                          activeDevices: deviceCount,
+                          maxDevices: maxDevices,
+                          userName: userName,
+                          userPhotoUrl: userPhotoUrl,
+                          onProfileTap: _navigateToProfile,
                           onSettingsTap: _navigateToSettings,
                           onPowerTap: _handleExit,
                         );

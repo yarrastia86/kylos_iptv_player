@@ -43,6 +43,7 @@ abstract class Routes {
   static const String addPlaylistFromSettings = '/settings/playlists/add';
   static const String profiles = '/settings/profiles';
   static const String about = '/settings/about';
+  static const String deviceManagement = '/settings/devices';
 
   // Search
   static const String search = '/search';

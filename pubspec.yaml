@@ -72,9 +72,10 @@ dependencies:
   # In-App Purchases
   # Official Flutter plugin supporting Google Play Billing and Apple StoreKit.
   # Provides unified API for purchases across platforms.
-  in_app_purchase: ^3.1.13
-  in_app_purchase_storekit: ^0.3.13   # iOS StoreKit 2 support
-  in_app_purchase_android: ^0.3.3     # Android specific extensions
+  # Using latest versions that support Billing Library 7.x (PendingPurchasesParams API)
+  in_app_purchase: ^3.2.0
+  in_app_purchase_storekit: ^0.3.18   # iOS StoreKit 2 support
+  in_app_purchase_android: ^0.4.0    # Android Billing Library 7.x support
 
   # RevenueCat - Cross-platform subscription management
   # Handles Apple/Google/Amazon billing, entitlement sync, and analytics
@@ -86,6 +87,11 @@ dependencies:
 
   # Firebase Analytics - User behavior and churn tracking
   firebase_analytics: ^11.3.6
+
+  # Device Info - For multi-device management
+  device_info_plus: ^10.1.0
+  package_info_plus: ^8.0.2
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:

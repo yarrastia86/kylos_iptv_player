@@ -14,6 +14,7 @@ import 'package:kylos_iptv_player/features/search/presentation/screens/search_sc
 import 'package:kylos_iptv_player/features/series/presentation/screens/series_details_screen.dart';
 import 'package:kylos_iptv_player/features/series/presentation/screens/series_list_screen.dart';
 import 'package:kylos_iptv_player/features/series/presentation/screens/series_screen.dart';
+import 'package:kylos_iptv_player/features/settings/presentation/screens/device_management_screen.dart';
 import 'package:kylos_iptv_player/features/settings/presentation/screens/playlists_screen.dart';
 import 'package:kylos_iptv_player/features/settings/presentation/screens/settings_screen.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/screens/movie_details_screen.dart';
@@ -190,6 +191,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.addPlaylistFromSettings,
         builder: (context, state) => const AddPlaylistScreen(),
+      ),
+      // Device management screen
+      GoRoute(
+        path: Routes.deviceManagement,
+        builder: (context, state) => const DeviceManagementScreen(),
       ),
 
       // Fullscreen player

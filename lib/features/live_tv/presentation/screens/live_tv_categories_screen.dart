@@ -581,30 +581,32 @@ class _CategoryTileState extends State<_CategoryTile>
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            widget.category.name,
-                            style: KylosTvTextStyles.cardTitle.copyWith(
-                              color: _isFocused
-                                  ? KylosColors.liveTvGlow
-                                  : KylosColors.textPrimary,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
+                          Flexible(
+                            child: Text(
+                              widget.category.name,
+                              style: KylosTvTextStyles.cardTitle.copyWith(
+                                color: _isFocused
+                                    ? KylosColors.liveTvGlow
+                                    : KylosColors.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          if (widget.category.channelCount > 0) ...[
-                            const SizedBox(height: 2),
+                          if (widget.category.channelCount > 0)
                             Text(
                               '${_formatCount(widget.category.channelCount)} channels',
                               style: KylosTvTextStyles.cardSubtitle.copyWith(
                                 color: _isFocused
-                                    ? KylosColors.liveTvGlow.withOpacity(0.8)
+                                    ? KylosColors.liveTvGlow.withValues(alpha: 0.8)
                                     : KylosColors.textMuted,
                                 fontSize: 14,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
                         ],
                       ),
                     ),

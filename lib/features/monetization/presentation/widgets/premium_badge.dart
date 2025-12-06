@@ -286,9 +286,13 @@ class PremiumFeatureLabel extends StatelessWidget {
           Icon(icon, size: 18, color: KylosColors.textSecondary),
           const SizedBox(width: 8),
         ],
-        Text(
-          label,
-          style: labelStyle ?? KylosTvTextStyles.body,
+        Flexible(
+          child: Text(
+            label,
+            style: labelStyle ?? KylosTvTextStyles.body,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         const SizedBox(width: 8),
         const PremiumBadge(size: PremiumBadgeSize.tiny),

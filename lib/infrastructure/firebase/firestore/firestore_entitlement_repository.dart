@@ -107,12 +107,17 @@ class FirestoreEntitlementRepository implements EntitlementRepository {
         return FeatureLimits.forTier(tier);
       }
 
+      final defaults = FeatureLimits.forTier(tier);
       return FeatureLimits(
-        maxProfiles: tierLimits['maxProfiles'] as int? ?? 2,
-        maxPlaylists: tierLimits['maxPlaylists'] as int? ?? 1,
-        maxFavorites: tierLimits['maxFavorites'] as int? ?? 50,
-        epgDaysAvailable: tierLimits['epgDaysAvailable'] as int? ?? 1,
-        cloudSyncEnabled: tierLimits['cloudSyncEnabled'] as bool? ?? false,
+        maxProfiles: tierLimits['maxProfiles'] as int? ?? defaults.maxProfiles,
+        maxPlaylists: tierLimits['maxPlaylists'] as int? ?? defaults.maxPlaylists,
+        maxFavorites: tierLimits['maxFavorites'] as int? ?? defaults.maxFavorites,
+        epgDaysAvailable: tierLimits['epgDaysAvailable'] as int? ?? defaults.epgDaysAvailable,
+        cloudSyncEnabled: tierLimits['cloudSyncEnabled'] as bool? ?? defaults.cloudSyncEnabled,
+        maxConcurrentStreams: tierLimits['maxConcurrentStreams'] as int? ?? defaults.maxConcurrentStreams,
+        maxRegisteredDevices: tierLimits['maxRegisteredDevices'] as int? ?? defaults.maxRegisteredDevices,
+        allowDownloads: tierLimits['allowDownloads'] as bool? ?? defaults.allowDownloads,
+        maxDownloads: tierLimits['maxDownloads'] as int? ?? defaults.maxDownloads,
       );
     } on FirebaseException catch (e) {
       if (kDebugMode) {

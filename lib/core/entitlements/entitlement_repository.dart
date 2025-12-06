@@ -149,6 +149,12 @@ class PurchaseRecord {
 }
 
 /// Feature limits based on subscription tier.
+///
+/// Multi-device support:
+/// - Free tier: 1 concurrent stream, 2 devices
+/// - Pro tier: 2 concurrent streams, 5 devices (like Netflix Standard)
+/// - Pro+ tier: 4 concurrent streams, 10 devices (like Netflix Premium)
+/// - Family tier: 6 concurrent streams, 15 devices
 class FeatureLimits {
   const FeatureLimits({
     required this.maxProfiles,
@@ -156,6 +162,10 @@ class FeatureLimits {
     required this.maxFavorites,
     required this.epgDaysAvailable,
     required this.cloudSyncEnabled,
+    required this.maxConcurrentStreams,
+    required this.maxRegisteredDevices,
+    this.allowDownloads = false,
+    this.maxDownloads = 0,
   });
 
   final int maxProfiles;
@@ -164,22 +174,72 @@ class FeatureLimits {
   final int epgDaysAvailable;
   final bool cloudSyncEnabled;
 
+  /// Maximum simultaneous streams across all devices.
+  final int maxConcurrentStreams;
+
+  /// Maximum devices that can be registered to this account.
+  final int maxRegisteredDevices;
+
+  /// Whether offline downloads are allowed.
+  final bool allowDownloads;
+
+  /// Maximum number of offline downloads.
+  final int maxDownloads;
+
   /// Default free tier limits.
+  /// Like Netflix Basic with ads: 1 screen, limited devices.
   static const free = FeatureLimits(
     maxProfiles: 2,
     maxPlaylists: 1,
     maxFavorites: 50,
     epgDaysAvailable: 1,
     cloudSyncEnabled: false,
+    maxConcurrentStreams: 1,
+    maxRegisteredDevices: 2,
+    allowDownloads: false,
+    maxDownloads: 0,
   );
 
   /// Default pro tier limits.
+  /// Like Netflix Standard: 2 screens, more devices.
   static const pro = FeatureLimits(
-    maxProfiles: 10,
+    maxProfiles: 5,
     maxPlaylists: 10,
     maxFavorites: 500,
     epgDaysAvailable: 7,
     cloudSyncEnabled: true,
+    maxConcurrentStreams: 2,
+    maxRegisteredDevices: 5,
+    allowDownloads: true,
+    maxDownloads: 10,
+  );
+
+  /// Pro+ tier limits.
+  /// Like Netflix Premium: 4 screens, more devices, 4K.
+  static const proPlus = FeatureLimits(
+    maxProfiles: 8,
+    maxPlaylists: 25,
+    maxFavorites: 1000,
+    epgDaysAvailable: 14,
+    cloudSyncEnabled: true,
+    maxConcurrentStreams: 4,
+    maxRegisteredDevices: 10,
+    allowDownloads: true,
+    maxDownloads: 25,
+  );
+
+  /// Family tier limits.
+  /// Maximum sharing: 6 screens for large families.
+  static const family = FeatureLimits(
+    maxProfiles: 10,
+    maxPlaylists: 50,
+    maxFavorites: 2000,
+    epgDaysAvailable: 14,
+    cloudSyncEnabled: true,
+    maxConcurrentStreams: 6,
+    maxRegisteredDevices: 15,
+    allowDownloads: true,
+    maxDownloads: 50,
   );
 
   /// Gets limits for a given tier.
@@ -190,6 +250,35 @@ class FeatureLimits {
       case SubscriptionTier.pro:
         return pro;
     }
+  }
+
+  /// Gets limits by tier name string.
+  static FeatureLimits forTierName(String tierName) {
+    switch (tierName.toLowerCase()) {
+      case 'pro':
+        return pro;
+      case 'pro_plus':
+      case 'proplus':
+        return proPlus;
+      case 'family':
+        return family;
+      case 'free':
+      default:
+        return free;
+    }
+  }
+
+  /// Display text for concurrent streams limit.
+  String get streamsDisplayText {
+    if (maxConcurrentStreams == 1) {
+      return '1 screen at a time';
+    }
+    return '$maxConcurrentStreams screens at a time';
+  }
+
+  /// Display text for device limit.
+  String get devicesDisplayText {
+    return 'Up to $maxRegisteredDevices devices';
   }
 }
 

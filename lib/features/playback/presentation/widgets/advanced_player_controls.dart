@@ -405,8 +405,12 @@ class _AdvancedPlayerControlsState
             children: [
               const Icon(Icons.lock, color: Colors.white, size: 20),
               const SizedBox(width: 8),
-              const Text('Pantalla Bloqueada',
-                  style: TextStyle(color: Colors.white)),
+              const Text(
+                'Pantalla Bloqueada',
+                style: TextStyle(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(width: 16),
               GestureDetector(
                 onTap: _toggleLock,
@@ -492,6 +496,8 @@ class _AdvancedPlayerControlsState
                     Text(
                       content.categoryName!,
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                 ],
               ],

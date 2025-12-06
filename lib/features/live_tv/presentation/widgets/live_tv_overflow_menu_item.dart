@@ -139,6 +139,8 @@ class _LiveTvOverflowMenuItemState extends State<LiveTvOverflowMenuItem> {
                           _isHighlighted ? FontWeight.w600 : FontWeight.w500,
                       letterSpacing: 0.5,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
 

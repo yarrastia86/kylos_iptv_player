@@ -106,13 +106,17 @@ class _MovieCategoryRowState extends State<MovieCategoryRow> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  color: KylosColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: KylosColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (widget.showSeeAll && widget.onSeeAll != null)

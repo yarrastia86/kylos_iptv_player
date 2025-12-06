@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:kylos_iptv_player/core/devices/device.dart';
+import 'package:kylos_iptv_player/core/devices/device_providers.dart';
+import 'package:kylos_iptv_player/core/devices/stream_session.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_providers.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_state.dart';
 import 'package:kylos_iptv_player/features/ads/domain/entities/ad_config.dart';
@@ -18,6 +21,7 @@ import 'package:kylos_iptv_player/features/playback/presentation/providers/playe
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/advanced_player_controls.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/player_error_view.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/player_loading_view.dart';
+import 'package:kylos_iptv_player/features/playback/presentation/widgets/stream_limit_dialog.dart';
 
 /// Fullscreen player screen with advanced controls.
 ///
@@ -39,15 +43,19 @@ class FullscreenPlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
-    with InterstitialAdMixin {
+    with InterstitialAdMixin, WidgetsBindingObserver {
   bool _showPrerollAd = true;
   bool _prerollCompleted = false;
   String? _lastContentId;
   bool _isMidrollAdShowing = false;
+  bool _streamLimitExceeded = false;
+  bool _isCheckingStreamLimit = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     // Set landscape orientation for fullscreen
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -56,8 +64,11 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
     // Hide system UI for immersive experience
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    // Check if user is Pro (no ads)
+    // Initialize device registration and stream session
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeStreamSession();
+
+      // Check if user is Pro (no ads)
       final shouldShowAds = ref.read(shouldShowAdsProvider);
       if (!shouldShowAds) {
         setState(() {
@@ -68,8 +79,111 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
     });
   }
 
+  int _retryCount = 0;
+  static const int _maxRetries = 2;
+
+  Future<void> _initializeStreamSession() async {
+    try {
+      // First, ensure device is registered
+      final regResult = await ref.read(deviceManagerProvider.notifier).registerCurrentDevice();
+
+      // If registration failed with error, allow playback anyway (graceful degradation)
+      if (regResult is DeviceRegistrationError) {
+        debugPrint('Device registration error: ${regResult.message}');
+        // Allow playback without multi-device tracking
+        if (mounted) {
+          setState(() {
+            _isCheckingStreamLimit = false;
+          });
+        }
+        return;
+      }
+
+      // Then start stream session
+      final playbackState = ref.read(playbackNotifierProvider);
+      final content = playbackState.content;
+
+      final result = await ref.read(streamSessionManagerProvider.notifier).startStream(
+        contentId: content?.id,
+        contentTitle: content?.title,
+        contentType: content?.type.name,
+      );
+
+      if (!mounted) return;
+
+      if (result is StreamLimitExceeded) {
+        // Show limit exceeded dialog
+        final shouldContinue = await StreamLimitDialog.show(
+          context,
+          maxStreams: result.maxStreams,
+          activeSessions: result.activeSessions,
+        );
+
+        if (shouldContinue && mounted) {
+          // Retry starting stream
+          _retryCount = 0;
+          await _initializeStreamSession();
+        } else if (mounted) {
+          setState(() {
+            _streamLimitExceeded = true;
+            _isCheckingStreamLimit = false;
+          });
+        }
+      } else if (result is StreamDeviceNotRegistered) {
+        // Device not registered, try again (with retry limit)
+        _retryCount++;
+        if (_retryCount < _maxRetries && mounted) {
+          await ref.read(deviceManagerProvider.notifier).registerCurrentDevice();
+          await _initializeStreamSession();
+        } else if (mounted) {
+          // Allow playback without stream tracking after max retries
+          setState(() {
+            _isCheckingStreamLimit = false;
+          });
+        }
+      } else if (result is StreamStartError) {
+        // On error, allow playback anyway (graceful degradation)
+        debugPrint('Stream session error: ${result.message}');
+        if (mounted) {
+          setState(() {
+            _isCheckingStreamLimit = false;
+          });
+        }
+      } else {
+        setState(() {
+          _isCheckingStreamLimit = false;
+        });
+      }
+    } catch (e) {
+      // On any exception, allow playback (graceful degradation)
+      debugPrint('Stream session initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _isCheckingStreamLimit = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // Handle app lifecycle for stream session
+    if (state == AppLifecycleState.paused) {
+      ref.read(streamSessionManagerProvider.notifier).pauseSession();
+    } else if (state == AppLifecycleState.resumed) {
+      ref.read(streamSessionManagerProvider.notifier).resumeSession();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+
+    // End stream session
+    ref.read(streamSessionManagerProvider.notifier).endSession();
+
     // Restore portrait orientation
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -144,39 +258,89 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
     final playbackState = ref.watch(playbackNotifierProvider);
     final videoController = ref.watch(videoControllerProvider);
     final settings = ref.watch(playerSettingsProvider);
+    final maxStreams = ref.watch(maxConcurrentStreamsProvider);
 
     // Check if content changed to show pre-roll for every video
     _checkForNewContent(playbackState);
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Video layer with aspect ratio support and mid-roll ads
-          _buildVideoLayerWithMidroll(videoController, settings, playbackState),
+    // Show stream limit overlay if exceeded
+    if (_streamLimitExceeded) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: StreamLimitOverlay(
+          maxStreams: maxStreams,
+          onManageDevices: () {
+            // Navigate to device management
+            context.pop();
+            // TODO: Navigate to device management screen
+          },
+          onUpgrade: () {
+            // Navigate to paywall
+            context.pop();
+            // TODO: Navigate to paywall
+          },
+          onBack: () => context.pop(),
+        ),
+      );
+    }
 
-          // Loading indicator (only show if preroll completed)
-          if (_prerollCompleted) _buildLoadingLayer(playbackState),
+    // Show loading while checking stream limit
+    if (_isCheckingStreamLimit) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text(
+                'Checking stream availability...',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
-          // Error view
-          _buildErrorLayer(playbackState),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _handleBack();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Video layer with aspect ratio support and mid-roll ads
+            _buildVideoLayerWithMidroll(videoController, settings, playbackState),
 
-          // Advanced controls overlay (only show if preroll completed)
-          if (_prerollCompleted)
-            AdvancedPlayerControls(
-              onBack: _handleBack,
-              autoHide: true,
-              hideDelay: const Duration(seconds: 4),
-            ),
+            // Loading indicator (only show if preroll completed)
+            if (_prerollCompleted) _buildLoadingLayer(playbackState),
 
-          // Pre-roll ad overlay (shown before content plays)
-          if (_showPrerollAd)
-            PrerollAdOverlay(
-              onAdComplete: _handlePrerollComplete,
-              onAdSkipped: _handlePrerollComplete,
-            ),
-        ],
+            // Error view
+            _buildErrorLayer(playbackState),
+
+            // Advanced controls overlay (only show if preroll completed)
+            if (_prerollCompleted)
+              AdvancedPlayerControls(
+                onBack: _handleBack,
+                autoHide: true,
+                hideDelay: const Duration(seconds: 4),
+              ),
+
+            // Pre-roll ad overlay (shown before content plays)
+            if (_showPrerollAd)
+              PrerollAdOverlay(
+                onAdComplete: _handlePrerollComplete,
+                onAdSkipped: _handlePrerollComplete,
+              ),
+          ],
+        ),
       ),
     );
   }

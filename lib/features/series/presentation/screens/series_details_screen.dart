@@ -616,19 +616,28 @@ class _EpisodeCardState extends State<_EpisodeCard> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Row(
+                    Wrap(
+                      spacing: KylosSpacing.s,
+                      runSpacing: 2,
                       children: [
-                        if (_formattedDuration != null) ...[
-                          Icon(Icons.access_time, size: 12, color: KylosColors.textMuted),
-                          const SizedBox(width: 4),
-                          Text(_formattedDuration!, style: TextStyle(fontSize: 11, color: KylosColors.textMuted)),
-                          const SizedBox(width: KylosSpacing.s),
-                        ],
-                        if (widget.episode.releaseDate != null && widget.episode.releaseDate!.isNotEmpty) ...[
-                          Icon(Icons.calendar_today, size: 12, color: KylosColors.textMuted),
-                          const SizedBox(width: 4),
-                          Text(widget.episode.releaseDate!, style: TextStyle(fontSize: 11, color: KylosColors.textMuted)),
-                        ],
+                        if (_formattedDuration != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.access_time, size: 12, color: KylosColors.textMuted),
+                              const SizedBox(width: 4),
+                              Text(_formattedDuration!, style: const TextStyle(fontSize: 11, color: KylosColors.textMuted)),
+                            ],
+                          ),
+                        if (widget.episode.releaseDate != null && widget.episode.releaseDate!.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_today, size: 12, color: KylosColors.textMuted),
+                              const SizedBox(width: 4),
+                              Text(widget.episode.releaseDate!, style: const TextStyle(fontSize: 11, color: KylosColors.textMuted)),
+                            ],
+                          ),
                       ],
                     ),
                   ],
