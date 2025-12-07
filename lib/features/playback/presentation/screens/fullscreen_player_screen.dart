@@ -18,6 +18,7 @@ import 'package:kylos_iptv_player/features/ads/presentation/widgets/midroll_ad_c
 import 'package:kylos_iptv_player/features/ads/presentation/widgets/preroll_ad_overlay.dart';
 import 'package:kylos_iptv_player/features/playback/domain/player_settings.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/providers/player_settings_provider.dart';
+import 'package:kylos_iptv_player/core/handoff/presentation/widgets/incoming_handoff_dialog.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/advanced_player_controls.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/player_error_view.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/widgets/player_loading_view.dart';
@@ -311,35 +312,37 @@ class _FullscreenPlayerScreenState extends ConsumerState<FullscreenPlayerScreen>
           _handleBack();
         }
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Video layer with aspect ratio support and mid-roll ads
-            _buildVideoLayerWithMidroll(videoController, settings, playbackState),
+      child: IncomingHandoffListener(
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Video layer with aspect ratio support and mid-roll ads
+              _buildVideoLayerWithMidroll(videoController, settings, playbackState),
 
-            // Loading indicator (only show if preroll completed)
-            if (_prerollCompleted) _buildLoadingLayer(playbackState),
+              // Loading indicator (only show if preroll completed)
+              if (_prerollCompleted) _buildLoadingLayer(playbackState),
 
-            // Error view
-            _buildErrorLayer(playbackState),
+              // Error view
+              _buildErrorLayer(playbackState),
 
-            // Advanced controls overlay (only show if preroll completed)
-            if (_prerollCompleted)
-              AdvancedPlayerControls(
-                onBack: _handleBack,
-                autoHide: true,
-                hideDelay: const Duration(seconds: 4),
-              ),
+              // Advanced controls overlay (only show if preroll completed)
+              if (_prerollCompleted)
+                AdvancedPlayerControls(
+                  onBack: _handleBack,
+                  autoHide: true,
+                  hideDelay: const Duration(seconds: 4),
+                ),
 
-            // Pre-roll ad overlay (shown before content plays)
-            if (_showPrerollAd)
-              PrerollAdOverlay(
-                onAdComplete: _handlePrerollComplete,
-                onAdSkipped: _handlePrerollComplete,
-              ),
-          ],
+              // Pre-roll ad overlay (shown before content plays)
+              if (_showPrerollAd)
+                PrerollAdOverlay(
+                  onAdComplete: _handlePrerollComplete,
+                  onAdSkipped: _handlePrerollComplete,
+                ),
+            ],
+          ),
         ),
       ),
     );

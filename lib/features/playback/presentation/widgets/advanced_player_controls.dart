@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_providers.dart';
 import 'package:kylos_iptv_player/core/domain/playback/playback_state.dart';
+import 'package:kylos_iptv_player/core/handoff/presentation/widgets/handoff_button.dart';
 import 'package:kylos_iptv_player/features/playback/domain/player_settings.dart';
 import 'package:kylos_iptv_player/features/playback/presentation/providers/player_settings_provider.dart';
 
@@ -737,6 +738,9 @@ class _AdvancedPlayerControlsState
               onPressed: () => _showSubtitlesDialog(state),
               tooltip: 'Subtítulos',
             ),
+
+          // Handoff to another device
+          const HandoffButton(),
 
           // Aspect ratio
           IconButton(

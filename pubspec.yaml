@@ -93,6 +93,12 @@ dependencies:
   package_info_plus: ^8.0.2
   uuid: ^4.5.1
 
+  # Cross-Device Playback & Handoff
+  firebase_database: ^11.2.0       # Realtime Database for device presence
+  firebase_messaging: ^15.1.6      # FCM for handoff push notifications
+  qr_flutter: ^4.1.0               # QR code generation for TV pairing
+  mobile_scanner: ^5.2.3           # QR code scanning
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

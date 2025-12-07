@@ -21,6 +21,7 @@ import 'package:kylos_iptv_player/features/series/presentation/providers/series_
 import 'package:kylos_iptv_player/features/vod/data/repositories/playlist_vod_repository.dart';
 import 'package:kylos_iptv_player/features/vod/presentation/providers/vod_providers.dart';
 import 'package:kylos_iptv_player/core/domain/watch_history/watch_history_providers.dart';
+import 'package:kylos_iptv_player/infrastructure/repositories/hybrid_watch_history_repository.dart';
 import 'package:kylos_iptv_player/infrastructure/repositories/local_watch_history_repository.dart';
 import 'package:kylos_iptv_player/infrastructure/firebase/firebase_initializer.dart';
 import 'package:kylos_iptv_player/infrastructure/firebase/firebase_providers.dart';
@@ -86,7 +87,11 @@ Future<void> bootstrap({
   final vodRepository = PlaylistVodRepository(localStorage: localStorage);
   final seriesRepository = PlaylistSeriesRepository(localStorage: localStorage);
   final epgRepository = MockEpgRepository();
-  final watchHistoryRepository = LocalWatchHistoryRepository(localStorage: localStorage);
+  final localWatchHistoryRepository = LocalWatchHistoryRepository(localStorage: localStorage);
+  // Use hybrid repository for cross-device resume support
+  final watchHistoryRepository = HybridWatchHistoryRepository(
+    localRepository: localWatchHistoryRepository,
+  );
 
   // Create provider container with platform overrides
   final container = ProviderContainer(
