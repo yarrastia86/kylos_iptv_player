@@ -117,6 +117,12 @@ class StreamSession {
 
   /// Creates a StreamSession from JSON.
   factory StreamSession.fromJson(Map<String, dynamic> json, String id) {
+    // Handle nullable timestamps (can be null when using FieldValue.serverTimestamp)
+    final now = DateTime.now();
+    final startedAtTimestamp = json['startedAt'] as Timestamp?;
+    final lastHeartbeatAtTimestamp = json['lastHeartbeatAt'] as Timestamp?;
+    final endedAtTimestamp = json['endedAt'] as Timestamp?;
+
     return StreamSession(
       id: id,
       userId: json['userId'] as String,
@@ -126,11 +132,9 @@ class StreamSession {
         (p) => p.name == json['devicePlatform'],
         orElse: () => DevicePlatform.unknown,
       ),
-      startedAt: (json['startedAt'] as Timestamp).toDate(),
-      lastHeartbeatAt: (json['lastHeartbeatAt'] as Timestamp).toDate(),
-      endedAt: json['endedAt'] != null
-          ? (json['endedAt'] as Timestamp).toDate()
-          : null,
+      startedAt: startedAtTimestamp?.toDate() ?? now,
+      lastHeartbeatAt: lastHeartbeatAtTimestamp?.toDate() ?? now,
+      endedAt: endedAtTimestamp?.toDate(),
       status: StreamSessionStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => StreamSessionStatus.ended,

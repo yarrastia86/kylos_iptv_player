@@ -285,6 +285,12 @@ class Device {
 
   /// Creates a Device from JSON.
   factory Device.fromJson(Map<String, dynamic> json, String id) {
+    // Handle nullable timestamps (can be null when using FieldValue.serverTimestamp)
+    final now = DateTime.now();
+    final createdAtTimestamp = json['createdAt'] as Timestamp?;
+    final lastActiveAtTimestamp = json['lastActiveAt'] as Timestamp?;
+    final lastStreamAtTimestamp = json['lastStreamAt'] as Timestamp?;
+
     return Device(
       id: id,
       userId: json['userId'] as String,
@@ -300,11 +306,9 @@ class Device {
       model: json['model'] as String?,
       osVersion: json['osVersion'] as String?,
       appVersion: json['appVersion'] as String?,
-      createdAt: (json['createdAt'] as Timestamp).toDate(),
-      lastActiveAt: (json['lastActiveAt'] as Timestamp).toDate(),
-      lastStreamAt: json['lastStreamAt'] != null
-          ? (json['lastStreamAt'] as Timestamp).toDate()
-          : null,
+      createdAt: createdAtTimestamp?.toDate() ?? now,
+      lastActiveAt: lastActiveAtTimestamp?.toDate() ?? now,
+      lastStreamAt: lastStreamAtTimestamp?.toDate(),
       isCurrentDevice: json['isCurrentDevice'] as bool? ?? false,
       isTrusted: json['isTrusted'] as bool? ?? false,
     );
