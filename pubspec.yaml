@@ -58,12 +58,12 @@ dependencies:
   # Firebase
   # Core Firebase SDK and FlutterFire plugins for authentication,
   # cloud database, remote configuration, and crash reporting.
-  firebase_core: ^3.8.1
-  firebase_auth: ^5.3.4
-  cloud_firestore: ^5.6.0
-  firebase_remote_config: ^5.1.6
-  firebase_crashlytics: ^4.2.2       # Crash reporting and logging
-  firebase_app_check: ^0.3.2+2       # API abuse protection
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+  firebase_remote_config: ^6.1.2
+  firebase_crashlytics: ^5.0.5       # Crash reporting and logging
+  firebase_app_check: ^0.4.1+2       # API abuse protection
   google_sign_in: ^6.2.2
 
   # Date/Time formatting
@@ -86,7 +86,7 @@ dependencies:
   google_mobile_ads: ^5.1.0
 
   # Firebase Analytics - User behavior and churn tracking
-  firebase_analytics: ^11.3.6
+  firebase_analytics: ^12.0.4
 
   # Device Info - For multi-device management
   device_info_plus: ^10.1.0
@@ -94,8 +94,8 @@ dependencies:
   uuid: ^4.5.1
 
   # Cross-Device Playback & Handoff
-  firebase_database: ^11.2.0       # Realtime Database for device presence
-  firebase_messaging: ^15.1.6      # FCM for handoff push notifications
+  firebase_database: ^12.1.0       # Realtime Database for device presence
+  firebase_messaging: ^16.0.4      # FCM for handoff push notifications
   qr_flutter: ^4.1.0               # QR code generation for TV pairing
   mobile_scanner: ^5.2.3           # QR code scanning
 
