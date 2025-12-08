@@ -74,7 +74,7 @@ dependencies:
   # Provides unified API for purchases across platforms.
   # Using latest versions that support Billing Library 7.x (PendingPurchasesParams API)
   in_app_purchase: ^3.2.0
-  in_app_purchase_storekit: ^0.3.18   # iOS StoreKit 2 support
+  in_app_purchase_storekit: ^0.4.6+2   # iOS StoreKit 2 support
   in_app_purchase_android: ^0.4.0    # Android Billing Library 7.x support
 
   # RevenueCat - Cross-platform subscription management
