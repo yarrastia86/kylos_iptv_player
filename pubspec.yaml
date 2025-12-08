@@ -90,7 +90,7 @@ dependencies:
 
   # Device Info - For multi-device management
   device_info_plus: ^10.1.0
-  package_info_plus: ^8.0.2
+  package_info_plus: ^9.0.0
   uuid: ^4.5.1
 
   # Cross-Device Playback & Handoff
