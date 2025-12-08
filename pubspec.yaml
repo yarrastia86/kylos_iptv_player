@@ -45,7 +45,7 @@ dependencies:
   # 4. Supports multiple audio/subtitle tracks common in IPTV streams
   # 5. Hardware acceleration for smooth playback
   # 6. Active maintenance and community support
-  media_kit: ^1.1.10
+  media_kit: ^1.2.3
   media_kit_video: ^1.2.4
   media_kit_libs_video: ^1.0.4           # Native video libraries
 
