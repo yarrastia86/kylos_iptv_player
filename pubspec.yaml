@@ -97,7 +97,7 @@ dependencies:
   firebase_database: ^11.2.0       # Realtime Database for device presence
   firebase_messaging: ^15.1.6      # FCM for handoff push notifications
   qr_flutter: ^4.1.0               # QR code generation for TV pairing
-  mobile_scanner: ^5.2.3           # QR code scanning
+  mobile_scanner: ^7.1.3           # QR code scanning
 
 dev_dependencies:
   flutter_test:
