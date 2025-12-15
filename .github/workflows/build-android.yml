@@ -208,7 +208,7 @@ jobs:
           fi
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.set-output.outputs.artifact_name }}-apk
           path: ${{ steps.set-output.outputs.apk_path }}
@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload AAB artifact
         if: inputs.build_type == 'release'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: android-mobile-release-aab
           path: build/app/outputs/bundle/release/app-release.aab
@@ -329,7 +329,7 @@ jobs:
           fi
 
       - name: Upload TV APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.set-output.outputs.artifact_name }}-apk
           path: ${{ steps.set-output.outputs.apk_path }}
